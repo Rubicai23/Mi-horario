@@ -1,0 +1,7 @@
+node_modules/
+dist/
+.DS_Store
+
+# Proyectos nativos de Capacitor (se regeneran con `npx cap add android|ios`; quita estas líneas si prefieres versionarlos)
+android/
+ios/

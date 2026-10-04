@@ -1,0 +1,50 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ───────────── Funciones auxiliares ─────────────
+
+    // Sesión iniciada con un método real (se excluye el acceso anónimo).
+    function isSignedIn() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    // Solo el propietario: el uid de la sesión debe ser EXACTAMENTE el del ruta.
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    // El id del documento debe ser una fecha YYYY-MM-DD con mes 01-12 y día 01-31.
+    function isDayId(day) {
+      return day.matches('^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$');
+    }
+
+    // Forma exacta del documento: { blocks: list, updatedAt: timestamp del servidor }.
+    function isValidDay(data) {
+      return data.keys().hasOnly(['blocks', 'updatedAt'])
+        && data.keys().hasAll(['blocks', 'updatedAt'])
+        && data.blocks is list
+        && data.blocks.size() <= 60            // mismo límite que LIMITS.blocksPerDay en config.js
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;     // el cliente debe usar serverTimestamp()
+    }
+
+    // ───────────── users/{uid}/days/{day} ─────────────
+    match /users/{uid}/days/{day} {
+      allow get, list: if isOwner(uid);
+
+      allow create, update: if isOwner(uid)
+        && isDayId(day)
+        && isValidDay(request.resource.data);
+
+      allow delete: if isOwner(uid);
+    }
+
+    // ───────────── Todo lo demás: denegado ─────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

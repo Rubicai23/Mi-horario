@@ -1,0 +1,13 @@
+{
+  "appId": "com.mihorario.app",
+  "appName": "Mi horario",
+  "webDir": "dist",
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "iconColor": "#3F6B5A"
+    }
+  }
+}

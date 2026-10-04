@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Mi horario</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="Horario diario interactivo, editable y con rachas">
+
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/png" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <meta name="theme-color" content="#F2F3F0" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121413" media="(prefers-color-scheme: dark)">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="Horario">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+
+  <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+
+<main class="app" id="app">
+  <header class="top">
+    <span class="brand">Mi horario</span>
+    <div class="tools">
+      <button class="icon-btn" id="openStats" aria-label="Estadísticas de la semana">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V4M18 20v-6"/></svg>
+      </button>
+      <button class="icon-btn" id="openSettings" aria-label="Ajustes">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <nav class="days" id="days" aria-label="Días de la semana"></nav>
+  <section class="hero" id="hero"></section>
+  <section class="streak" id="streak" aria-label="Racha"></section>
+
+  <div class="actions">
+    <button class="pill" id="sortBtn">Ordenar</button>
+    <button class="pill" id="addBtn">Añadir</button>
+  </div>
+  <ul class="tl" id="tl"></ul>
+  <div class="quick" id="quick"></div>
+
+  <footer class="foot">
+    <p class="hint" id="hint"></p>
+    <button class="link" id="clearBtn" hidden>Vaciar este día</button>
+  </footer>
+</main>
+
+<!-- Acceso previo: se muestra mientras no hay sesión -->
+<div class="gate" id="gate" hidden>
+  <div class="gate-card">
+    <img class="gate-icon" src="/icons/icon-192.png" alt="" width="72" height="72">
+    <h1>Mi horario</h1>
+    <p class="set-s" id="gateMsg">Conectando…</p>
+    <form id="authForm" novalidate hidden>
+      <label class="f"><span>Correo</span><input id="authEmail" type="email" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false"></label>
+      <label class="f"><span>Contraseña</span><input id="authPass" type="password" autocomplete="current-password" minlength="6"></label>
+      <p class="err" id="authErr" role="alert" hidden></p>
+      <div class="set-btns">
+        <button class="btn2" type="submit" id="signInBtn">Entrar</button>
+        <button class="btn2" type="button" id="signUpBtn">Crear cuenta</button>
+      </div>
+      <button class="link" type="button" id="forgotBtn">¿Olvidaste la contraseña?</button>
+    </form>
+    <button class="btn2 block" type="button" id="retryBtn" hidden>Reintentar</button>
+  </div>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <span id="toastMsg"></span>
+  <button id="toastAct" hidden></button>
+</div>
+
+<div class="ov" id="ov"></div>
+
+<!-- Editar / crear actividad -->
+<section class="sheet" id="sheetEdit" role="dialog" aria-modal="true" aria-labelledby="sTitle">
+  <h2 id="sTitle">Editar actividad</h2>
+  <label class="f"><span>Actividad</span><input id="fT" type="text" maxlength="80" autocomplete="off"></label>
+  <div class="g2">
+    <label class="f"><span>Inicio</span><input id="fS" type="time"></label>
+    <label class="f"><span>Fin</span><input id="fE" type="time"></label>
+  </div>
+  <div class="chips" id="fC" role="group" aria-label="Tipo de actividad"></div>
+  <label class="f"><span>Lo que hice</span><textarea id="fN" rows="3" maxlength="300" placeholder="Anota aquí lo que hiciste"></textarea></label>
+  <p class="err" id="fErr" role="alert" hidden></p>
+  <button class="btn" id="saveBtn">Guardar</button>
+  <div class="sub">
+    <button id="cancelBtn">Cancelar</button>
+    <button class="del" id="delBtn">Eliminar</button>
+  </div>
+</section>
+
+<!-- Ajustes -->
+<section class="sheet" id="sheetSettings" role="dialog" aria-modal="true" aria-labelledby="stTitle">
+  <h2 id="stTitle">Ajustes</h2>
+
+  <div class="set-row">
+    <div>
+      <div class="set-t">Avisos de actividad</div>
+      <p class="set-s" id="notifyStatus"></p>
+    </div>
+    <button class="switch" id="notifySwitch" role="switch" aria-checked="false" aria-label="Avisos de actividad"><i></i></button>
+  </div>
+
+  <div class="set-row">
+    <div>
+      <div class="set-t">Estadísticas de uso</div>
+      <p class="set-s" id="analyticsStatus"></p>
+    </div>
+    <button class="switch" id="analyticsSwitch" role="switch" aria-checked="false" aria-label="Estadísticas de uso"><i></i></button>
+  </div>
+
+  <div class="set-block">
+    <div class="set-t">Cuenta</div>
+    <p class="set-s" id="accountStatus">Conectando con la nube…</p>
+    <div class="set-btns" id="accountOut" hidden>
+      <button class="btn2" type="button" id="signOutBtn">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <div class="set-block">
+    <div class="set-t">Copia de seguridad</div>
+    <p class="set-s">Guarda tus horarios y anotaciones en un archivo .json o restáuralos desde uno.</p>
+    <div class="set-btns">
+      <button class="btn2" id="exportBtn">Exportar</button>
+      <button class="btn2" id="importBtn">Importar</button>
+    </div>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+  </div>
+
+  <div class="set-block" id="installBlock" hidden>
+    <div class="set-t">Instalar la app</div>
+    <p class="set-s" id="installHint"></p>
+    <div class="set-btns"><button class="btn2" id="installBtn" hidden>Instalar</button></div>
+  </div>
+
+  <button class="btn" id="closeSettings">Hecho</button>
+</section>
+
+<!-- Estadísticas -->
+<section class="sheet" id="sheetStats" role="dialog" aria-modal="true" aria-labelledby="sgTitle">
+  <h2 id="sgTitle">Esta semana</h2>
+  <p class="set-s range" id="statsRange"></p>
+  <div id="statsBody"></div>
+  <p class="set-s foot-note">Cuenta como hecho lo que marcas con el círculo de cada actividad.</p>
+  <button class="btn" id="closeStats">Cerrar</button>
+</section>
+
+<script type="module" src="/src/app.js"></script>
+</body>
+</html>

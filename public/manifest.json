@@ -1,0 +1,18 @@
+{
+  "name": "Mi horario",
+  "short_name": "Horario",
+  "description": "Horario diario interactivo y editable",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "id": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F2F3F0",
+  "theme_color": "#3F6B5A",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
