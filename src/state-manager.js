@@ -20,6 +20,7 @@ import {
 const CATEGORY_KEYS = new Set(CATEGORIES.map(c => c.key));
 const BLOCK_ID_RE = /^[\w-]{1,40}$/;
 const PRESET_ID_RE = /^[a-z0-9-]{1,24}$/;
+const TEMPLATE_ID_RE = /^t[a-z0-9]{1,20}$/;
 const BACKUP_SETTING_KEYS = Object.freeze([`${STORAGE.settingPrefix}notify`]);
 
 export const EMPTY_DAY = Object.freeze([]);
@@ -51,6 +52,34 @@ export function sanitizeBlock(raw) {
 export function sanitizeBlocks(raw) {
   if (!Array.isArray(raw)) return null;
   return raw.slice(0, LIMITS.blocksPerDay).map(sanitizeBlock).filter(Boolean).sort(byStart);
+}
+
+/** Plantilla propia: { id, name, blocks:[{s,e,t,c}] } o null. No guarda notas ni estado de "hecha". */
+export function sanitizeTemplate(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, LIMITS.templateName) : '';
+  if (!name || typeof raw.id !== 'string' || !TEMPLATE_ID_RE.test(raw.id) || !Array.isArray(raw.blocks)) return null;
+  const blocks = raw.blocks.slice(0, LIMITS.blocksPerDay).map(sanitizeBlock).filter(Boolean)
+    .sort(byStart).map(({ s, e, t, c }) => ({ s, e, t, c }));
+  return blocks.length ? { id: raw.id, name, blocks } : null;
+}
+
+/** Perfil del usuario (se sincroniza como un único documento). null si no es un objeto. */
+export function sanitizeProfile(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const seen = new Set();
+  const templates = (Array.isArray(raw.templates) ? raw.templates : [])
+    .map(sanitizeTemplate)
+    .filter(t => t && !seen.has(t.id) && seen.add(t.id))
+    .slice(0, LIMITS.templates);
+  return { templates };
+}
+
+/** Fusiona plantillas: las entrantes sustituyen a las que tienen el mismo id; se respeta el máximo. */
+export function mergeTemplates(current, incoming) {
+  const byId = new Map(current.map(t => [t.id, t]));
+  incoming.forEach(t => byId.set(t.id, t));
+  return Array.from(byId.values()).slice(0, LIMITS.templates);
 }
 
 /** Mensaje de error para el usuario, o null si el borrador es válido. */
@@ -168,22 +197,32 @@ export function reorderBlocks(blocks, orderedIds) {
   });
 }
 
-/** Crea las actividades de una plantilla saltándose las que se solapan con las existentes. */
-export function instantiatePreset(preset, dow, existing) {
-  const rows = preset.rows(dow) || [];
+/** Actividades que se solapan con el tramo [s, e), ignorando la de id `ignoreId`. */
+export function findOverlaps(blocks, { s, e }, ignoreId = null) {
+  if (!Number.isFinite(s) || !Number.isFinite(e) || e <= s) return [];
+  return blocks.filter(b => b.id !== ignoreId && s < b.e && e > b.s);
+}
+
+/** Coloca candidatas saltándose las que chocan con lo ya ocupado (o entre sí). `skipped` = títulos omitidos. */
+export function placeBlocks(existing, candidates) {
   const occupied = existing.slice();
   const added = [];
   const skipped = [];
-  rows.forEach(([from, to, t, c]) => {
-    const s = fromHHMM(from);
-    const e = fromHHMM(to);
-    if (occupied.some(b => s < b.e && e > b.s)) { skipped.push(t); return; }
-    const block = sanitizeBlock({ id: uid(), s, e, t, c, n: '', d: false, p: preset.id });
-    if (!block) return;
+  candidates.forEach(block => {
+    if (findOverlaps(occupied, block).length) { skipped.push(block.t); return; }
     added.push(block);
     occupied.push(block);
   });
   return { added, skipped };
+}
+
+/** Crea las actividades de una plantilla saltándose las que se solapan con las existentes. */
+export function instantiatePreset(preset, dow, existing) {
+  const rows = preset.rows(dow) || [];
+  const candidates = rows
+    .map(([from, to, t, c]) => sanitizeBlock({ id: uid(), s: fromHHMM(from), e: fromHHMM(to), t, c, n: '', d: false, p: preset.id }))
+    .filter(Boolean);
+  return placeBlocks(existing, candidates);
 }
 
 /** Próximos inicios de actividad (no hechas), ordenados por hora. Alimenta las notificaciones nativas. */
@@ -239,10 +278,13 @@ export function parseBackup(text) {
   }
   const days = [];
   const settings = [];
+  let profile = null;
   Object.keys(payload.data).forEach(storageKey => {
     const value = payload.data[storageKey];
     if (typeof value !== 'string') return;
-    if (storageKey.startsWith(STORAGE.dayPrefix)) {
+    if (storageKey === STORAGE.profile) {
+      try { profile = sanitizeProfile(JSON.parse(value)); } catch (_) { profile = null; }
+    } else if (storageKey.startsWith(STORAGE.dayPrefix)) {
       const key = storageKey.slice(STORAGE.dayPrefix.length);
       let blocks = null;
       try { blocks = sanitizeBlocks(JSON.parse(value)); } catch (_) { blocks = null; }
@@ -251,8 +293,9 @@ export function parseBackup(text) {
       settings.push([storageKey, value]);
     }
   });
-  if (!days.length && !settings.length) throw new Error('La copia no contiene datos válidos.');
-  return { days, settings };
+  const hasProfile = Boolean(profile && profile.templates.length);
+  if (!days.length && !settings.length && !hasProfile) throw new Error('La copia no contiene datos válidos.');
+  return { days, settings, profile: hasProfile ? profile : null };
 }
 
 /* ═══════════════ Almacenamiento (adaptadores) ═══════════════ */
@@ -299,12 +342,16 @@ export function createBrowserStorage() {
 
 /* ═══════════════ Gestor de estado ═══════════════ */
 
-const NO_SYNC = Object.freeze({ push: () => Promise.resolve(false), remove: () => Promise.resolve(false) });
+const NO_SYNC = Object.freeze({
+  push: () => Promise.resolve(false),
+  remove: () => Promise.resolve(false),
+  pushProfile: () => Promise.resolve(false)
+});
 
 /**
  * @param {object} deps
  * @param {{read, write, remove, keys}} deps.storage  adaptador de almacenamiento local
- * @param {{push(key, blocks): Promise<boolean>, remove(key): Promise<boolean>}} [deps.sync]  subida a la nube
+ * @param {{push(key, blocks): Promise<boolean>, remove(key): Promise<boolean>, pushProfile?(profile): Promise<boolean>}} [deps.sync]  subida a la nube
  * @param {() => Date} [deps.clock]
  */
 export function createStateManager({ storage, sync = NO_SYNC, clock = () => new Date() }) {
@@ -365,6 +412,40 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       if (ok && versions.get(key) === version) clearDirty(key);
     }, () => { /* queda pendiente: se reintentará en reconcile() */ });
   };
+
+  /* ── Perfil (plantillas propias): un único documento, con el mismo esquema de "pendiente" ── */
+  const freezeProfile = value => Object.freeze({
+    templates: Object.freeze(value.templates.map(t => Object.freeze({
+      id: t.id, name: t.name, blocks: Object.freeze(t.blocks.map(b => Object.freeze({ ...b })))
+    })))
+  });
+  let profile = null;
+  let profileVersion = 0;
+  const loadProfile = () => {
+    if (!profile) {
+      let parsed = null;
+      try { parsed = sanitizeProfile(JSON.parse(storage.read(STORAGE.profile))); } catch (_) { parsed = null; }
+      profile = freezeProfile(parsed || { templates: [] });
+    }
+    return profile;
+  };
+  const sendProfile = () => {
+    profileVersion += 1;
+    const version = profileVersion;
+    storage.write(STORAGE.profileDirty, '1');
+    let operation;
+    try { operation = sync.pushProfile ? sync.pushProfile(loadProfile()) : false; } catch (_) { operation = false; }
+    Promise.resolve(operation).then(ok => {
+      if (ok && profileVersion === version) storage.remove(STORAGE.profileDirty);
+    }, () => { /* queda pendiente */ });
+  };
+  const commitProfile = (next, origin = 'local') => {
+    profile = freezeProfile(next);
+    storage.write(STORAGE.profile, JSON.stringify(profile));
+    sendProfile();
+    emit({ type: 'profile', origin });
+  };
+  const isProfileDirty = () => storage.read(STORAGE.profileDirty) === '1';
 
   /* ── Escritura ── */
   const commit = (key, blocks, origin = 'local') => {
@@ -472,11 +553,99 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       return { ok: true };
     },
 
-    /* Plantillas (onboarding) */
+    /**
+     * Copia las actividades de un día a otros. Las copias nacen sin marcar y sin anotaciones.
+     * Por defecto se añaden saltándose las que chocan con lo existente; con `replace` sustituyen el día.
+     * Devuelve `previous` ([clave, actividades anteriores]) para poder deshacer.
+     */
+    copyDay(fromKey, toKeys, { replace = false } = {}) {
+      assertDateKey(fromKey);
+      const source = load(fromKey);
+      if (!source.length) return { ok: false, error: 'Este día no tiene actividades que copiar.' };
+      const targets = Array.from(new Set(toKeys)).filter(k => isDateKey(k) && k !== fromKey);
+      if (!targets.length) return { ok: false, error: 'Elige al menos un día.' };
+      const previous = [];
+      let added = 0;
+      let skipped = 0;
+      targets.forEach(key => {
+        const current = load(key);
+        const base = replace ? [] : current;
+        const candidates = source.map(b => sanitizeBlock({ ...b, id: uid(), d: false, n: '' }));
+        const placed = placeBlocks(base, candidates);
+        const usable = placed.added.slice(0, Math.max(0, LIMITS.blocksPerDay - base.length));
+        skipped += candidates.length - usable.length;
+        if (!usable.length) return;
+        previous.push([key, current]);
+        added += usable.length;
+        commit(key, [...base, ...usable]);
+      });
+      if (!previous.length) return { ok: false, error: 'No se copió nada: esas horas ya están ocupadas.' };
+      return { ok: true, days: previous.length, added, skipped, previous };
+    },
+
+    /** Revierte una copia: restaura cada día a como estaba. */
+    undoCopy(previous) {
+      previous.forEach(([key, blocks]) => {
+        if (blocks.length) api.restoreDay(key, blocks);
+        else api.clearDay(key);
+      });
+    },
+
+    /* Plantillas propias (se sincronizan en el perfil) */
+    listTemplates: () => loadProfile().templates,
+
+    saveTemplate(name, key) {
+      assertDateKey(key);
+      const day = load(key);
+      if (!day.length) return { ok: false, error: 'Este día no tiene actividades que guardar.' };
+      const clean = typeof name === 'string' ? name.trim().slice(0, LIMITS.templateName) : '';
+      if (!clean) return { ok: false, error: 'Escribe un nombre para la plantilla.' };
+      const templates = loadProfile().templates;
+      if (templates.length >= LIMITS.templates) return { ok: false, error: `Máximo ${LIMITS.templates} plantillas. Elimina alguna.` };
+      if (templates.some(t => t.name.toLowerCase() === clean.toLowerCase())) return { ok: false, error: 'Ya tienes una plantilla con ese nombre.' };
+      const template = sanitizeTemplate({
+        id: `t${uid().slice(1, 13)}`,
+        name: clean,
+        blocks: day.map(({ s, e, t, c }) => ({ s, e, t, c }))
+      });
+      if (!template) return { ok: false, error: 'No se pudo crear la plantilla.' };
+      commitProfile({ templates: [...templates, template] });
+      return { ok: true, template };
+    },
+
+    deleteTemplate(id) {
+      const templates = loadProfile().templates;
+      const removed = templates.find(t => t.id === id);
+      if (!removed) return { ok: false };
+      commitProfile({ templates: templates.filter(t => t.id !== id) });
+      return { ok: true, removed };
+    },
+
+    restoreTemplate(template) {
+      const clean = sanitizeTemplate(template);
+      const templates = loadProfile().templates;
+      if (!clean || templates.some(t => t.id === clean.id) || templates.length >= LIMITS.templates) return { ok: false };
+      commitProfile({ templates: [...templates, clean] });
+      return { ok: true };
+    },
+
+    /* Plantillas de arranque (onboarding): las integradas más las propias */
     availablePresets(key) {
       assertDateKey(key);
       const dow = parseDateKey(key).getDay();
       const day = load(key);
+      const custom = loadProfile().templates.map(t => ({
+        id: t.id,
+        label: t.name,
+        title: `Añadir «${t.name}»`,
+        icon: 'star',
+        quick: true,
+        custom: true,
+        count: t.blocks.length,
+        from: toHHMM(Math.min(...t.blocks.map(b => b.s))),
+        to: toHHMM(Math.max(...t.blocks.map(b => b.e))),
+        used: day.some(b => b.p === t.id)
+      }));
       return PRESETS.map(preset => {
         const rows = preset.rows(dow);
         if (!rows || !rows.length) return null;
@@ -493,12 +662,15 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
           to: toHHMM(Math.max(...ends)),
           used: day.some(b => b.p === preset.id)
         };
-      }).filter(Boolean);
+      }).filter(Boolean).concat(custom);
     },
 
     applyPreset(key, presetId) {
       assertDateKey(key);
-      const preset = PRESETS.find(p => p.id === presetId);
+      const template = loadProfile().templates.find(t => t.id === presetId);
+      const preset = template
+        ? { id: template.id, rows: () => template.blocks.map(b => [toHHMM(b.s), toHHMM(b.e), b.t, b.c]) }
+        : PRESETS.find(p => p.id === presetId);
       if (!preset) return { ok: false, error: 'Plantilla desconocida.' };
       const current = load(key);
       const room = LIMITS.blocksPerDay - current.length;
@@ -565,6 +737,23 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       Object.keys(dirty).forEach(key => { if (dirty[key] === 'del') send(key, 'del'); });
     },
 
+    /** Perfil llegado de la nube (null = el documento no existe). No pisa cambios locales pendientes. */
+    applyRemoteProfile(remote) {
+      if (remote === null || remote === undefined || isProfileDirty()) return false;
+      const clean = sanitizeProfile(remote);
+      if (!clean) return false;
+      if (JSON.stringify(clean) === JSON.stringify(loadProfile())) return false;
+      profile = freezeProfile(clean);
+      storage.write(STORAGE.profile, JSON.stringify(profile));
+      emit({ type: 'profile', origin: 'remote' });
+      return true;
+    },
+
+    /** Primera lectura completa del perfil: sube lo pendiente o lo que solo existe en este dispositivo. */
+    reconcileProfile(remoteExists) {
+      if (isProfileDirty() || (!remoteExists && loadProfile().templates.length)) sendProfile();
+    },
+
     /* Sesión: a qué cuenta pertenecen los datos locales */
     getSessionUid: () => storage.read(STORAGE.uid),
     setSessionUid: uidValue => storage.write(STORAGE.uid, uidValue),
@@ -574,6 +763,9 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       storedKeys().forEach(key => storage.remove(dayStorageKey(key)));
       storage.remove(STORAGE.dirty);
       storage.remove(STORAGE.uid);
+      storage.remove(STORAGE.profile);
+      storage.remove(STORAGE.profileDirty);
+      profile = null;
       cache.clear();
       versions.clear();
       emit({ type: 'reset', origin: 'local' });
@@ -592,11 +784,12 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       const data = {};
       storedKeys().forEach(key => { data[dayStorageKey(key)] = storage.read(dayStorageKey(key)); });
       BACKUP_SETTING_KEYS.forEach(k => { const v = storage.read(k); if (v !== null) data[k] = v; });
+      if (loadProfile().templates.length) data[STORAGE.profile] = JSON.stringify(loadProfile());
       return { app: BACKUP.app, version: BACKUP.version, exportedAt: new Date().toISOString(), data };
     },
 
     importBackup(text) {
-      const { days, settings } = parseBackup(text);
+      const { days, settings, profile: imported } = parseBackup(text);
       days.forEach(([key, blocks]) => {
         const frozen = freezeDay(blocks);
         cache.set(key, frozen);
@@ -604,8 +797,11 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
         send(key, 'put');
       });
       settings.forEach(([k, v]) => storage.write(k, v));
+      if (imported && imported.templates.length) {
+        commitProfile({ templates: mergeTemplates(loadProfile().templates, imported.templates) }, 'import');
+      }
       emit({ type: 'days', keys: days.map(([key]) => key), origin: 'import' });
-      return { days: days.length };
+      return { days: days.length, templates: imported ? imported.templates.length : 0 };
     }
   };
 

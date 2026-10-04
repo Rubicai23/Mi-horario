@@ -2,7 +2,9 @@
  * firebase-service.js — Única puerta de entrada a Firebase (Auth, Firestore y Analytics).
  * El resto de la app solo conoce la interfaz que devuelve `createCloudService`; no importa Firebase.
  *
- * Modelo de datos:  users/{uid}/days/{YYYY-MM-DD}  →  { blocks: [...], updatedAt: serverTimestamp }
+ * Modelo de datos:
+ *   users/{uid}/days/{YYYY-MM-DD}  →  { blocks: [...], updatedAt: serverTimestamp }
+ *   users/{uid}/profile/main       →  { templates: [...], updatedAt: serverTimestamp }
  *
  * Estados de cuenta: loading → signedIn | signedOut | unavailable
  */
@@ -50,12 +52,13 @@ const noop = () => {};
  * @param {boolean} [options.native]  true dentro de Capacitor (Android/iOS)
  */
 export function createCloudService({ config, native = false }) {
-  const handlers = { state: noop, days: noop, error: noop };
+  const handlers = { state: noop, days: noop, profile: noop, error: noop };
   let app = null;
   let auth = null;
   let db = null;
   let user = null;
   let stopWatching = null;
+  let stopWatchingProfile = null;
   let initPromise = null;
   let analytics = null;
   let analyticsModule = null;
@@ -79,8 +82,23 @@ export function createCloudService({ config, native = false }) {
 
   const dayRef = (uid, key) => doc(db, 'users', uid, 'days', key);
 
-  const stopDaysListener = () => {
+  const profileRef = uid => doc(db, 'users', uid, 'profile', 'main');
+
+  const stopListeners = () => {
     if (stopWatching) { stopWatching(); stopWatching = null; }
+    if (stopWatchingProfile) { stopWatchingProfile(); stopWatchingProfile = null; }
+  };
+
+  const watchProfile = () => {
+    stopWatchingProfile = onSnapshot(
+      profileRef(user.uid),
+      snapshot => handlers.profile({
+        fromCache: snapshot.metadata.fromCache,
+        exists: snapshot.exists(),
+        data: snapshot.exists() ? snapshot.data() : null
+      }),
+      error => handlers.error(error)
+    );
   };
 
   const watchDays = () => {
@@ -99,10 +117,10 @@ export function createCloudService({ config, native = false }) {
   };
 
   const onUserChanged = nextUser => {
-    stopDaysListener();
+    stopListeners();
     user = nextUser;
     publishState(nextUser ? 'signedIn' : 'signedOut');
-    if (nextUser) watchDays();
+    if (nextUser) { watchDays(); watchProfile(); }
   };
 
   const requireAuth = () => {
@@ -131,6 +149,7 @@ export function createCloudService({ config, native = false }) {
 
     onState(fn) { handlers.state = fn; },
     onDays(fn) { handlers.days = fn; },
+    onProfile(fn) { handlers.profile = fn; },
     onError(fn) { handlers.error = fn; },
 
     /* ── Cuenta ── */
@@ -157,6 +176,20 @@ export function createCloudService({ config, native = false }) {
       try {
         await setDoc(dayRef(uid, key), {
           blocks: JSON.parse(JSON.stringify(blocks)), // quita undefined: Firestore los rechaza
+          updatedAt: serverTimestamp()
+        });
+        return true;
+      } catch (error) {
+        handlers.error(error);
+        return false;
+      }
+    },
+    async pushProfile(profile) {
+      if (!db || !user) return false;
+      const { uid } = user;
+      try {
+        await setDoc(profileRef(uid), {
+          templates: JSON.parse(JSON.stringify(profile.templates)),
           updatedAt: serverTimestamp()
         });
         return true;

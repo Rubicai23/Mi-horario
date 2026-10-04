@@ -42,6 +42,27 @@ service cloud.firestore {
       allow delete: if isOwner(uid);
     }
 
+    // ───────────── users/{uid}/profile/main ─────────────
+    // Un único documento por usuario con sus plantillas propias.
+    function isValidProfile(data) {
+      return data.keys().hasOnly(['templates', 'updatedAt'])
+        && data.keys().hasAll(['templates', 'updatedAt'])
+        && data.templates is list
+        && data.templates.size() <= 20         // mismo límite que LIMITS.templates en config.js
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    match /users/{uid}/profile/{doc} {
+      allow get, list: if isOwner(uid);
+
+      allow create, update: if isOwner(uid)
+        && doc == 'main'
+        && isValidProfile(request.resource.data);
+
+      allow delete: if isOwner(uid);
+    }
+
     // ───────────── Todo lo demás: denegado ─────────────
     match /{document=**} {
       allow read, write: if false;

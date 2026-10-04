@@ -19,7 +19,7 @@ mi-horario-v2/
 ├── scripts/stamp-sw.js     Plugin de Vite: versiona la caché del SW
 ├── src/
 │   ├── app.js              Raíz de composición: cablea todo
-│   ├── state-manager.js    Estado, reglas de negocio y rachas (sin DOM ni Firebase)
+│   ├── state-manager.js    Estado, reglas de negocio, rachas, copiar día y plantillas (sin DOM ni Firebase)
 │   ├── firebase-service.js Auth, Firestore y Analytics
 │   ├── ui-components.js    Vistas (HTML), toast, hojas, deslizar y arrastrar
 │   ├── platform.js         Web vs nativo: notificaciones, archivos, instalación
@@ -51,6 +51,10 @@ npm run preview
    - Sin sesión → denegado.
    - Escritura con un campo extra, o `updatedAt` que no sea `serverTimestamp()` → denegado.
    - Id de documento `hoy` → denegado.
+   - `users/UID/profile/main` con `templates` (lista) y `updatedAt` = `request.time` → permitido solo al propietario.
+   - `users/UID/profile/otro` o con un campo extra → denegado.
+
+Modelo de datos: `users/{uid}/days/{YYYY-MM-DD}` (actividades de cada día) y `users/{uid}/profile/main` (plantillas propias). **Si actualizas la app y no republicas `firestore.rules`, las plantillas funcionan en el dispositivo pero no se sincronizan.**
 
 Limitación: las reglas no tienen bucles, así que no pueden validar el contenido de cada bloque, solo la forma del documento y `blocks.size() <= 60`. Cada cliente sanea los bloques; el aislamiento entre usuarios sí es total.
 

@@ -34,12 +34,14 @@
     </div>
   </header>
 
+  <div class="weeknav" id="weeknav"></div>
   <nav class="days" id="days" aria-label="Días de la semana"></nav>
   <section class="hero" id="hero"></section>
   <section class="streak" id="streak" aria-label="Racha"></section>
 
   <div class="actions">
     <button class="pill" id="sortBtn">Ordenar</button>
+    <button class="pill" id="moreBtn">Más</button>
     <button class="pill" id="addBtn">Añadir</button>
   </div>
   <ul class="tl" id="tl"></ul>
@@ -88,12 +90,58 @@
   </div>
   <div class="chips" id="fC" role="group" aria-label="Tipo de actividad"></div>
   <label class="f"><span>Lo que hice</span><textarea id="fN" rows="3" maxlength="300" placeholder="Anota aquí lo que hiciste"></textarea></label>
+  <p class="warn" id="fWarn" role="status" hidden></p>
   <p class="err" id="fErr" role="alert" hidden></p>
   <button class="btn" id="saveBtn">Guardar</button>
   <div class="sub">
     <button id="cancelBtn">Cancelar</button>
     <button class="del" id="delBtn">Eliminar</button>
   </div>
+</section>
+
+<!-- Menú del día -->
+<section class="sheet" id="sheetDay" role="dialog" aria-modal="true" aria-labelledby="sdTitle">
+  <h2 id="sdTitle">Este día</h2>
+  <p class="set-s menu-sub" id="dayLabel"></p>
+  <div class="menu">
+    <button class="menu-item" id="menuCopy"><b>Copiar a otros días</b><small>Repite este día en otros de esta semana o de la siguiente.</small></button>
+    <button class="menu-item" id="menuTemplates"><b>Plantillas</b><small>Guarda este día como plantilla o añade una de las tuyas.</small></button>
+  </div>
+  <button class="btn2 block" id="closeDay">Cerrar</button>
+</section>
+
+<!-- Copiar día -->
+<section class="sheet" id="sheetCopy" role="dialog" aria-modal="true" aria-labelledby="scTitle">
+  <h2 id="scTitle">Copiar día</h2>
+  <p class="set-s menu-sub" id="copyFrom"></p>
+  <div id="copyTargets"></div>
+  <div class="set-row slim">
+    <div>
+      <div class="set-t">Reemplazar lo que ya hay</div>
+      <p class="set-s" id="replaceHint">Si está desactivado, solo se añaden las actividades que no chocan con las existentes.</p>
+    </div>
+    <button class="switch" id="replaceSwitch" role="switch" aria-checked="false" aria-label="Reemplazar lo que ya hay"><i></i></button>
+  </div>
+  <p class="err" id="copyErr" role="alert" hidden></p>
+  <button class="btn" id="copyGo">Copiar</button>
+  <div class="sub"><button id="copyCancel">Cancelar</button></div>
+</section>
+
+<!-- Plantillas propias -->
+<section class="sheet" id="sheetTemplates" role="dialog" aria-modal="true" aria-labelledby="stpTitle">
+  <h2 id="stpTitle">Plantillas</h2>
+  <div class="set-block">
+    <div class="set-t">Guardar este día como plantilla</div>
+    <p class="set-s" id="tplSaveHint"></p>
+    <label class="f tpl-name"><span>Nombre</span><input id="tplName" type="text" maxlength="40" autocomplete="off" placeholder="Por ejemplo: Día de estudio"></label>
+    <p class="err" id="tplErr" role="alert" hidden></p>
+    <div class="set-btns"><button class="btn2" id="tplSave">Guardar plantilla</button></div>
+  </div>
+  <div class="set-block">
+    <div class="set-t">Mis plantillas</div>
+    <div id="tplList"></div>
+  </div>
+  <button class="btn" id="closeTpl">Hecho</button>
 </section>
 
 <!-- Ajustes -->

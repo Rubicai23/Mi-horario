@@ -7,6 +7,8 @@ export const STORAGE = Object.freeze({
   dayPrefix: 'day:',        // day:YYYY-MM-DD  -> JSON con las actividades del día
   uid: 'meta:uid',          // cuenta que "posee" los datos locales de este dispositivo
   dirty: 'meta:dirty',      // cambios locales pendientes de confirmar en la nube
+  profile: 'meta:profile',  // perfil del usuario (plantillas propias…): se sincroniza en un solo documento
+  profileDirty: 'meta:profile-dirty',
   settingPrefix: 'cfg:'     // cfg:notify, cfg:analytics
 });
 
@@ -15,8 +17,13 @@ export const MAX_MIN = 1439;            // 23:59
 export const LIMITS = Object.freeze({
   blocksPerDay: 60,                     // debe coincidir con firestore.rules
   titleLength: 80,
-  noteLength: 300
+  noteLength: 300,
+  templates: 20,                        // debe coincidir con firestore.rules
+  templateName: 40
 });
+
+/** Semanas que se pueden recorrer hacia atrás y hacia delante desde la actual. */
+export const WEEK_RANGE = Object.freeze({ back: 104, forward: 52 });
 
 /** Un día "cumple" cuando se completa al menos goalNum/goalDen de sus actividades. */
 export const STREAK_RULES = Object.freeze({

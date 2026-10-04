@@ -22,10 +22,29 @@ export const ICONS = Object.freeze({
   flame: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.5 3.3 3.6 4.9 3.6 8.7a3.6 3.6 0 0 1-7.2 0c0-1.3.4-2.2 1-3C7.7 9.2 6 11.4 6 14a6 6 0 0 0 12 0c0-5-4.5-7.4-6-11.5z"/></svg>',
   check: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2 6.5l2.6 2.6L10 3.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   grip: '<svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5.5h12M3 9h12M3 12.5h12" stroke-linecap="round"/></svg>',
-  plus: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2v8M2 6h8" stroke-linecap="round"/></svg>'
+  plus: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2v8M2 6h8" stroke-linecap="round"/></svg>',
+  star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.5l6-.8z"/></svg>',
+  copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></svg>',
+  left: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6L8.5 12l6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  right: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 });
 
 /* ═══════════════ Vistas ═══════════════ */
+
+const relativeWeek = offset => {
+  if (offset === 0) return 'Esta semana';
+  if (offset === -1) return 'Semana pasada';
+  if (offset === 1) return 'Próxima semana';
+  return offset < 0 ? `Hace ${-offset} semanas` : `Dentro de ${offset} semanas`;
+};
+
+/** Cabecera de la semana: flechas, rango de fechas y atajo "Hoy" cuando no se está en la semana actual. */
+export function weekNavMarkup({ dates, offset, canPrev, canNext }) {
+  return `<button class="wk-btn" id="wkPrev" aria-label="Semana anterior"${canPrev ? '' : ' disabled'}>${ICONS.left}</button>` +
+    `<div class="wk-title"><b>${formatShortDate(dates[0])} – ${formatShortDate(dates[6])}</b><small>${relativeWeek(offset)}</small></div>` +
+    (offset !== 0 ? '<button class="pill wk-today" id="wkToday">Hoy</button>' : '') +
+    `<button class="wk-btn" id="wkNext" aria-label="Semana siguiente"${canNext ? '' : ' disabled'}>${ICONS.right}</button>`;
+}
 
 /** Tira de días (lunes → domingo). `dates` = weekDates(hoy). */
 export function dayStripMarkup({ dates, today, selectedDow }) {
@@ -169,6 +188,37 @@ export function listMarkup({ blocks, isToday, nowMin, currentIndex, sorting, pre
     current: isToday && i === currentIndex,
     sorting
   })).join('');
+}
+
+/* ── Copiar día y plantillas propias ── */
+
+/** Elige los días de destino: la semana mostrada y la siguiente. El día de origen aparece desactivado. */
+export function copyTargetsMarkup({ weeks, sourceKey, selected, todayKey }) {
+  return weeks.map(week => (
+    `<div class="copy-week"><p class="copy-wl">${escapeHtml(week.label)}</p><div class="copy-days">` +
+    week.dates.map(date => {
+      const key = toDateKey(date);
+      const isSource = key === sourceKey;
+      const on = selected.has(key);
+      return `<button type="button" class="cday${on ? ' sel' : ''}${key === todayKey ? ' today' : ''}" data-key="${key}" aria-pressed="${on}"${isSource ? ' disabled' : ''}` +
+        ` aria-label="${DAY_NAMES[date.getDay()]} ${date.getDate()}${isSource ? ' (día de origen)' : ''}">` +
+        `<span class="l">${DAY_LETTERS[date.getDay()]}</span><span class="n">${date.getDate()}</span></button>`;
+    }).join('') + '</div></div>'
+  )).join('');
+}
+
+export function templatesMarkup(templates) {
+  if (!templates.length) {
+    return '<p class="set-s">Aún no tienes plantillas. Organiza un día a tu gusto y guárdalo para reutilizarlo con un toque.</p>';
+  }
+  return '<ul class="tpl-list">' + templates.map(t => {
+    const from = Math.min(...t.blocks.map(b => b.s));
+    const to = Math.max(...t.blocks.map(b => b.e));
+    return `<li class="tpl"><div class="tpl-t"><b>${escapeHtml(t.name)}</b>` +
+      `<small>${plural(t.blocks.length, 'actividad', 'actividades')} · ${toHHMM(from)}–${toHHMM(to)}</small></div>` +
+      `<div class="tpl-b"><button class="btn2" data-act="apply" data-id="${escapeHtml(t.id)}">Añadir</button>` +
+      `<button class="btn2 danger" data-act="delete" data-id="${escapeHtml(t.id)}" aria-label="Eliminar ${escapeHtml(t.name)}">Eliminar</button></div></li>`;
+  }).join('') + '</ul>';
 }
 
 /* ── Editor y estadísticas ── */

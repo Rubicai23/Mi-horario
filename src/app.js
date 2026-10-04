@@ -5,14 +5,18 @@
  * No contiene reglas de negocio (state-manager.js), ni acceso a Firebase (firebase-service.js),
  * ni HTML (ui-components.js), ni detalles web/nativos (platform.js).
  */
-import { FIREBASE_CONFIG, NOTIFICATIONS } from './config.js';
-import { createBrowserStorage, createStartWatcher, createStateManager, describeDay, parseBackup } from './state-manager.js';
+import { FIREBASE_CONFIG, NOTIFICATIONS, WEEK_RANGE } from './config.js';
+import {
+  createBrowserStorage, createStartWatcher, createStateManager, describeDay, findOverlaps, parseBackup
+} from './state-manager.js';
 import { createCloudService } from './firebase-service.js';
 import {
   createInstallPrompt, createNotifier, deliverFile, isNative, platformInfo, readFileAsText, registerServiceWorker
 } from './platform.js';
 import * as ui from './ui-components.js';
-import { dateForDow, fromHHMM, minutesOfDay, plural, shortTitle, toDateKey, toHHMM, weekDates } from './utils.js';
+import {
+  addDays, dateForDow, formatLongDate, fromHHMM, minutesOfDay, plural, shortTitle, toDateKey, toHHMM, weekDates
+} from './utils.js';
 
 const { $ } = ui;
 const vibrate = ms => { if (navigator.vibrate) navigator.vibrate(ms); };
@@ -31,7 +35,11 @@ function createContext() {
   const state = createStateManager({
     storage,
     clock,
-    sync: { push: (key, blocks) => cloud.pushDay(key, blocks), remove: key => cloud.removeDay(key) }
+    sync: {
+      push: (key, blocks) => cloud.pushDay(key, blocks),
+      remove: key => cloud.removeDay(key),
+      pushProfile: profile => cloud.pushProfile(profile)
+    }
   });
   const serviceWorker = registerServiceWorker();
   const sheets = ui.createSheetManager({ overlay: $('ov'), inert: [$('app')] });
@@ -43,17 +51,30 @@ function createContext() {
     editSheet: sheets.register($('sheetEdit')),
     settingsSheet: sheets.register($('sheetSettings')),
     statsSheet: sheets.register($('sheetStats')),
-    view: { selectedDow: clock().getDay(), sorting: false, dateKey: toDateKey(clock()), minuteKey: '', stale: false },
+    daySheet: sheets.register($('sheetDay')),
+    copySheet: sheets.register($('sheetCopy')),
+    templatesSheet: sheets.register($('sheetTemplates')),
+    view: { selectedDow: clock().getDay(), weekOffset: 0, sorting: false, dateKey: toDateKey(clock()), minuteKey: '', stale: false },
     account: { status: 'loading', email: '', uid: '' },
     analytics: 'off',       // off | on | unsupported
     migrated: false,        // ya se hizo la primera conciliación con la nube en esta sesión
+    profileMigrated: false, // ídem para el perfil (plantillas propias)
     busy: () => false,      // lo sustituye setupList: true mientras hay un gesto en curso
+    swipeReset: () => {},   // lo sustituye setupList: cierra la fila abierta
     render: () => {},       // lo sustituye createRenderer
     requestRender: () => {}
   };
 }
 
-const selectedKey = (ctx, now = ctx.clock()) => toDateKey(dateForDow(ctx.view.selectedDow, now));
+/** Fecha de referencia de la semana que se está viendo (hoy ± semanas). */
+const anchorOf = (ctx, now) => addDays(now, ctx.view.weekOffset * 7);
+const selectedKey = (ctx, now = ctx.clock()) => toDateKey(dateForDow(ctx.view.selectedDow, anchorOf(ctx, now)));
+
+/** Máximo de plantillas propias que se muestran como atajos (el resto, en "Más → Plantillas"). */
+const limitCustom = (presets, max) => {
+  let custom = 0;
+  return presets.filter(p => !p.custom || ++custom <= max);
+};
 
 /* ═════════════ Render ═════════════ */
 
@@ -75,8 +96,9 @@ function createRenderer(ctx) {
 
   function render(now = ctx.clock()) {
     view.stale = false;
-    const dates = weekDates(now);
-    const date = dates.find(d => d.getDay() === view.selectedDow) || now;
+    const anchor = anchorOf(ctx, now);
+    const dates = weekDates(anchor);
+    const date = dates.find(d => d.getDay() === view.selectedDow) || anchor;
     const key = toDateKey(date);
     const isToday = key === toDateKey(now);
     const blocks = state.getDay(key);
@@ -85,6 +107,9 @@ function createRenderer(ctx) {
     const presets = state.availablePresets(key);
     const welcome = state.savedDayCount() === 0;
 
+    $('weeknav').innerHTML = ui.weekNavMarkup({
+      dates, offset: view.weekOffset, canPrev: view.weekOffset > -WEEK_RANGE.back, canNext: view.weekOffset < WEEK_RANGE.forward
+    });
     $('days').innerHTML = ui.dayStripMarkup({ dates, today: now, selectedDow: view.selectedDow });
     $('hero').innerHTML = isToday
       ? ui.todayHeroMarkup({ now, status, nowMin, nextDay: state.nextPlannedDay(now), welcome })
@@ -93,13 +118,18 @@ function createRenderer(ctx) {
 
     keepFocus(() => {
       $('tl').className = `tl${view.sorting ? ' sorting' : ''}`;
-      $('tl').innerHTML = ui.listMarkup({ blocks, isToday, nowMin, currentIndex: status.index, sorting: view.sorting, presets, welcome });
+      $('tl').innerHTML = ui.listMarkup({
+        blocks, isToday, nowMin, currentIndex: status.index, sorting: view.sorting, presets: limitCustom(presets, 4), welcome
+      });
     });
-    $('quick').innerHTML = view.sorting || !blocks.length ? '' : ui.quickAddMarkup(presets.filter(p => p.quick && !p.used));
+    $('quick').innerHTML = view.sorting || !blocks.length
+      ? ''
+      : ui.quickAddMarkup(limitCustom(presets.filter(p => p.quick && !p.used), 4));
 
     $('sortBtn').textContent = view.sorting ? 'Listo' : 'Ordenar';
     $('sortBtn').classList.toggle('on', view.sorting);
     $('sortBtn').hidden = blocks.length < 2 && !view.sorting;
+    $('moreBtn').hidden = view.sorting;
     $('addBtn').hidden = view.sorting;
     $('clearBtn').hidden = !blocks.length || view.sorting;
     $('hint').textContent = view.sorting
@@ -169,7 +199,19 @@ function setupNavigation(ctx) {
     ctx.render();
   });
   $('hero').addEventListener('click', e => {
-    if (e.target.id === 'back') { view.selectedDow = ctx.clock().getDay(); ctx.render(); }
+    if (e.target.id === 'back') { view.weekOffset = 0; view.selectedDow = ctx.clock().getDay(); ctx.render(); }
+  });
+  $('weeknav').addEventListener('click', e => {
+    const button = e.target.closest('button');
+    if (!button || button.disabled) return;
+    if (button.id === 'wkPrev') view.weekOffset = Math.max(-WEEK_RANGE.back, view.weekOffset - 1);
+    else if (button.id === 'wkNext') view.weekOffset = Math.min(WEEK_RANGE.forward, view.weekOffset + 1);
+    else if (button.id === 'wkToday') { view.weekOffset = 0; view.selectedDow = ctx.clock().getDay(); }
+    else return;
+    ctx.swipeReset();
+    ctx.render();
+    const again = $(button.id);
+    if (again && !again.disabled) again.focus({ preventScroll: true }); // el teclado no pierde el foco al repintar
   });
   $('addBtn').addEventListener('click', () => openEditor(ctx, null));
   $('quick').addEventListener('click', e => {
@@ -197,6 +239,7 @@ function setupList(ctx) {
     }
   });
   ctx.busy = () => swipe.isBusy() || sorter.isActive();
+  ctx.swipeReset = swipe.closeOpen;
 
   $('sortBtn').addEventListener('click', () => { view.sorting = !view.sorting; swipe.closeOpen(); ctx.render(); });
 
@@ -222,6 +265,17 @@ function setupList(ctx) {
 
 const editor = { key: null, id: null, category: 'libre' };
 
+/** Avisa en vivo si el tramo elegido choca con otras actividades; guardar sigue siendo posible. */
+function refreshOverlapWarning(ctx) {
+  const range = { s: fromHHMM($('fS').value), e: fromHHMM($('fE').value) };
+  const others = findOverlaps(ctx.state.getDay(editor.key), range, editor.id);
+  $('fWarn').hidden = !others.length;
+  $('saveBtn').textContent = others.length ? 'Guardar igualmente' : 'Guardar';
+  if (!others.length) return;
+  const named = others.slice(0, 2).map(b => `«${shortTitle(b.t)}» (${toHHMM(b.s)}–${toHHMM(b.e)})`).join(' y ');
+  $('fWarn').textContent = `Se solapa con ${named}${others.length > 2 ? ` y ${others.length - 2} más` : ''}.`;
+}
+
 function openEditor(ctx, id) {
   const key = selectedKey(ctx);
   const blocks = ctx.state.getDay(key);
@@ -245,6 +299,7 @@ function openEditor(ctx, id) {
     $('fN').value = '';
     selectCategory('libre');
   }
+  refreshOverlapWarning(ctx);
   ctx.editSheet.open();
   if (!block) $('fT').focus();
 }
@@ -270,6 +325,11 @@ function setupEditor(ctx) {
     if (chip) selectCategory(chip.dataset.c);
   });
 
+  ['fS', 'fE'].forEach(id => {
+    $(id).addEventListener('input', () => { showEditorError(''); refreshOverlapWarning(ctx); });
+    $(id).addEventListener('change', () => refreshOverlapWarning(ctx));
+  });
+
   $('saveBtn').addEventListener('click', () => {
     const draft = {
       t: $('fT').value.trim(),
@@ -290,6 +350,133 @@ function setupEditor(ctx) {
     ctx.editSheet.close();
     removeWithUndo(ctx, editor.key, editor.id);
   });
+}
+
+/* ═════════════ Menú del día: copiar y plantillas propias ═════════════ */
+
+const copyState = { sourceKey: '', selected: new Set(), replace: false };
+
+function showCopyError(message) {
+  $('copyErr').textContent = message || '';
+  $('copyErr').hidden = !message;
+}
+
+function openCopy(ctx) {
+  const sourceKey = selectedKey(ctx);
+  const date = dateForDow(ctx.view.selectedDow, anchorOf(ctx, ctx.clock()));
+  if (!ctx.state.getDay(sourceKey).length) { ctx.toast.show('Este día no tiene actividades que copiar.'); return; }
+  const anchor = anchorOf(ctx, ctx.clock());
+  const weeks = [weekDates(anchor), weekDates(addDays(anchor, 7))].map((dates, i) => ({
+    label: `${i === 0 ? 'Semana mostrada' : 'Semana siguiente'}: ${ui.weekRangeLabel(dates)}`,
+    dates
+  }));
+  Object.assign(copyState, { sourceKey, selected: new Set(), replace: false });
+  $('copyFrom').textContent = `Se copiarán las ${plural(ctx.state.getDay(sourceKey).length, 'actividad', 'actividades')} de ${formatLongDate(date).toLowerCase()}, sin marcar y sin anotaciones.`;
+  $('copyTargets').innerHTML = ui.copyTargetsMarkup({ weeks, sourceKey, selected: copyState.selected, todayKey: toDateKey(ctx.clock()) });
+  $('replaceSwitch').setAttribute('aria-checked', 'false');
+  showCopyError('');
+  ctx.copySheet.open();
+}
+
+function setupDayMenu(ctx) {
+  const { state, toast } = ctx;
+
+  $('moreBtn').addEventListener('click', () => {
+    const date = dateForDow(ctx.view.selectedDow, anchorOf(ctx, ctx.clock()));
+    $('dayLabel').textContent = formatLongDate(date);
+    ctx.daySheet.open();
+  });
+  $('closeDay').addEventListener('click', ctx.daySheet.close);
+  $('menuCopy').addEventListener('click', () => openCopy(ctx));
+  $('menuTemplates').addEventListener('click', () => openTemplates(ctx));
+
+  /* Copiar */
+  $('copyTargets').addEventListener('click', e => {
+    const button = e.target.closest('.cday');
+    if (!button || button.disabled) return;
+    const on = !copyState.selected.has(button.dataset.key);
+    if (on) copyState.selected.add(button.dataset.key); else copyState.selected.delete(button.dataset.key);
+    button.classList.toggle('sel', on);
+    button.setAttribute('aria-pressed', on);
+    showCopyError('');
+  });
+  $('replaceSwitch').addEventListener('click', () => {
+    copyState.replace = !copyState.replace;
+    $('replaceSwitch').setAttribute('aria-checked', copyState.replace);
+    $('replaceHint').textContent = copyState.replace
+      ? 'Se borrará lo que haya en los días elegidos. Podrás deshacerlo justo después.'
+      : 'Si está desactivado, solo se añaden las actividades que no chocan con las existentes.';
+  });
+  $('copyCancel').addEventListener('click', ctx.copySheet.close);
+  $('copyGo').addEventListener('click', () => {
+    const result = state.copyDay(copyState.sourceKey, Array.from(copyState.selected), { replace: copyState.replace });
+    if (!result.ok) { showCopyError(result.error); return; }
+    ctx.cloud.track('day_copied', { days: result.days });
+    ctx.copySheet.close();
+    const skipped = result.skipped ? ` (${plural(result.skipped, 'omitida', 'omitidas')} por solaparse)` : '';
+    toast.show(`Copiado a ${plural(result.days, 'día', 'días')}${skipped}`, {
+      label: 'Deshacer',
+      duration: 7000,
+      onAction: () => state.undoCopy(result.previous)
+    });
+  });
+
+  /* Plantillas */
+  const showTemplateError = message => { $('tplErr').textContent = message || ''; $('tplErr').hidden = !message; };
+  const refreshTemplates = () => {
+    const key = selectedKey(ctx);
+    const count = state.getDay(key).length;
+    $('tplSaveHint').textContent = count
+      ? `Se guardarán las ${plural(count, 'actividad', 'actividades')} de este día (sin anotaciones).`
+      : 'Este día está vacío: añade actividades para poder guardarlo como plantilla.';
+    $('tplSave').disabled = !count;
+    $('tplName').disabled = !count;
+    $('tplList').innerHTML = ui.templatesMarkup(state.listTemplates());
+  };
+  ctx.refreshTemplates = refreshTemplates;
+
+  const saveTemplate = () => {
+    const result = state.saveTemplate($('tplName').value, selectedKey(ctx));
+    if (!result.ok) { showTemplateError(result.error); return; }
+    ctx.cloud.track('template_saved');
+    $('tplName').value = '';
+    showTemplateError('');
+    refreshTemplates();
+    toast.show('Plantilla guardada');
+  };
+  $('tplSave').addEventListener('click', saveTemplate);
+  $('tplName').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); saveTemplate(); } });
+  $('tplName').addEventListener('input', () => showTemplateError(''));
+  $('closeTpl').addEventListener('click', ctx.templatesSheet.close);
+
+  $('tplList').addEventListener('click', e => {
+    const button = e.target.closest('button[data-act]');
+    if (!button) return;
+    const { id } = button.dataset;
+    if (button.dataset.act === 'apply') {
+      ctx.templatesSheet.close();
+      applyPreset(ctx, id);
+      return;
+    }
+    const result = state.deleteTemplate(id);
+    if (!result.ok) return;
+    refreshTemplates();
+    toast.show('Plantilla eliminada', {
+      label: 'Deshacer',
+      onAction: () => { state.restoreTemplate(result.removed); if ($('sheetTemplates').classList.contains('open')) refreshTemplates(); }
+    });
+  });
+
+  // Un cambio llegado de otro dispositivo mientras la hoja está abierta.
+  state.subscribe(change => {
+    if (change.type === 'profile' && $('sheetTemplates').classList.contains('open')) refreshTemplates();
+  });
+}
+
+function openTemplates(ctx) {
+  ctx.refreshTemplates();
+  $('tplErr').hidden = true;
+  ctx.templatesSheet.open();
 }
 
 /* ═════════════ Estadísticas ═════════════ */
@@ -501,6 +688,7 @@ function setupAccount(ctx) {
       askAnalyticsConsent(ctx);
     } else {
       ctx.migrated = false;
+      ctx.profileMigrated = false;
     }
     refreshGate(ctx);
     ctx.refreshSettings();
@@ -512,6 +700,15 @@ function setupAccount(ctx) {
     if (!fromCache && !ctx.migrated) {
       ctx.migrated = true;
       state.reconcile(remoteKeys);
+    }
+  });
+
+  /* Perfil (plantillas propias): mismo criterio que los días */
+  cloud.onProfile(({ fromCache, exists, data }) => {
+    state.applyRemoteProfile(exists ? data : null);
+    if (!fromCache && !ctx.profileMigrated) {
+      ctx.profileMigrated = true;
+      state.reconcileProfile(exists);
     }
   });
 
@@ -568,7 +765,7 @@ function setupClock(ctx) {
   function tick(force = false) {
     const now = ctx.clock();
     const dateKey = toDateKey(now);
-    if (dateKey !== view.dateKey) { view.dateKey = dateKey; view.selectedDow = now.getDay(); force = true; }
+    if (dateKey !== view.dateKey) { view.dateKey = dateKey; view.selectedDow = now.getDay(); view.weekOffset = 0; force = true; }
     checkStarts(now, false);
     if (ctx.busy()) return; // no repintar durante un gesto; se hará al terminar
     const minuteKey = `${dateKey}-${now.getHours()}:${now.getMinutes()}`;
@@ -599,6 +796,7 @@ function main() {
   setupNavigation(ctx);
   setupList(ctx);
   setupEditor(ctx);
+  setupDayMenu(ctx);
   setupStats(ctx);
   setupSettings(ctx);
   setupAccount(ctx);
