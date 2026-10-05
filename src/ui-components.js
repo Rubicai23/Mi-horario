@@ -25,6 +25,7 @@ export const ICONS = Object.freeze({
   plus: '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M6 2v8M2 6h8" stroke-linecap="round"/></svg>',
   star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.5l6-.8z"/></svg>',
   copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2.5l3 3-3 3"/><path d="M4 11.5v-2a4 4 0 0 1 4-4h12"/><path d="M7 21.5l-3-3 3-3"/><path d="M20 12.5v2a4 4 0 0 1-4 4H4"/></svg>',
   left: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6L8.5 12l6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   right: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 });
@@ -164,6 +165,13 @@ export function quickAddMarkup(presets) {
   )).join('');
 }
 
+const itemMeta = b => {
+  const parts = [];
+  if (b.r) parts.push(`<span class="mt">${ICONS.repeat}Cada semana</span>`);
+  if (b.k && b.k.length) parts.push(`<span class="mt">${b.k.filter(item => item.d).length}/${b.k.length} subtareas</span>`);
+  return parts.length ? `<div class="meta">${parts.join('')}</div>` : '';
+};
+
 const itemMarkup = (b, { past, current, sorting }) => {
   const classes = `row${past ? ' past' : ''}${current ? ' cur' : ''}${b.d ? ' done' : ''}`;
   let note = '';
@@ -177,7 +185,7 @@ const itemMarkup = (b, { past, current, sorting }) => {
     '<button class="swipe-del" tabindex="-1" aria-hidden="true">Eliminar</button>' +
     `<div class="${classes}"${sorting ? '' : ' tabindex="0"'} style="--dot:${color}">` +
     `<span class="t">${toHHMM(b.s)}</span><span class="pt"><i></i></span>` +
-    `<span class="tx"><div class="ti">${escapeHtml(b.t)}</div><div class="du">hasta las ${toHHMM(b.e)}, ${formatDuration(b.e - b.s)}</div>${note}</span>` +
+    `<span class="tx"><div class="ti">${escapeHtml(b.t)}</div><div class="du">hasta las ${toHHMM(b.e)}, ${formatDuration(b.e - b.s)}</div>${itemMeta(b)}${note}</span>` +
     `${trailing}</div></li>`;
 };
 
@@ -219,6 +227,42 @@ export function templatesMarkup(templates) {
       `<div class="tpl-b"><button class="btn2" data-act="apply" data-id="${escapeHtml(t.id)}">Añadir</button>` +
       `<button class="btn2 danger" data-act="delete" data-id="${escapeHtml(t.id)}" aria-label="Eliminar ${escapeHtml(t.name)}">Eliminar</button></div></li>`;
   }).join('') + '</ul>';
+}
+
+/* ── Subtareas y repeticiones (editor y gestor) ── */
+
+const DOW_ORDER = Object.freeze([1, 2, 3, 4, 5, 6, 0]);   // lunes → domingo
+
+/** Filas de subtareas del editor: casilla, texto y botón de quitar. */
+export function subtasksMarkup(list) {
+  return list.map((item, i) => (
+    `<li class="sub-row${item.d ? ' done' : ''}" data-i="${i}">` +
+    `<button type="button" class="sub-ck" aria-pressed="${item.d}" aria-label="Marcar «${escapeHtml(item.t)}»"><span class="ring">${ICONS.check}</span></button>` +
+    `<span class="sub-t">${escapeHtml(item.t)}</span>` +
+    `<button type="button" class="sub-x" aria-label="Quitar «${escapeHtml(item.t)}»">×</button></li>`
+  )).join('');
+}
+
+/** Selector de días de la semana para repetir. `locked` = día de la actividad (siempre incluido). */
+export function weekdayChipsMarkup({ selected, locked }) {
+  return DOW_ORDER.map(dow => {
+    const on = selected.has(dow);
+    return `<button type="button" class="chip dow${on ? ' sel' : ''}" data-dow="${dow}" aria-pressed="${on}"` +
+      ` aria-label="${DAY_NAMES[dow]}"${dow === locked ? ' disabled' : ''}>${DAY_LETTERS[dow]}</button>`;
+  }).join('');
+}
+
+export const weekdaysLabel = dows => DOW_ORDER.filter(d => dows.includes(d)).map(d => DAY_LETTERS[d]).join(' ');
+
+export function repeatsMarkup(rules) {
+  if (!rules.length) {
+    return '<p class="set-s">No tienes actividades que se repitan. Al crear o editar una actividad, activa «Repetir cada semana».</p>';
+  }
+  return '<ul class="tpl-list">' + rules.map(r => (
+    `<li class="tpl"><div class="tpl-t"><b>${escapeHtml(r.t)}</b>` +
+    `<small>${weekdaysLabel(r.dows)} · ${toHHMM(r.s)}–${toHHMM(r.e)}</small></div>` +
+    `<div class="tpl-b"><button class="btn2 danger" data-act="stop" data-id="${escapeHtml(r.id)}" aria-label="Dejar de repetir ${escapeHtml(r.t)}">Dejar de repetir</button></div></li>`
+  )).join('') + '</ul>';
 }
 
 /* ── Editor y estadísticas ── */

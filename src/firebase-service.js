@@ -4,7 +4,7 @@
  *
  * Modelo de datos:
  *   users/{uid}/days/{YYYY-MM-DD}  →  { blocks: [...], updatedAt: serverTimestamp }
- *   users/{uid}/profile/main       →  { templates: [...], updatedAt: serverTimestamp }
+ *   users/{uid}/profile/main       →  { templates: [...], recurring: [...], updatedAt: serverTimestamp }
  *
  * Estados de cuenta: loading → signedIn | signedOut | unavailable
  */
@@ -190,6 +190,7 @@ export function createCloudService({ config, native = false }) {
       try {
         await setDoc(profileRef(uid), {
           templates: JSON.parse(JSON.stringify(profile.templates)),
+          recurring: JSON.parse(JSON.stringify(profile.recurring)),
           updatedAt: serverTimestamp()
         });
         return true;

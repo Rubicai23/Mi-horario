@@ -43,6 +43,11 @@ export function createInstallPrompt(onChange) {
   };
 }
 
+/** Título del aviso: "¡Toca Inglés!" al empezar, o "En 10 min: Inglés" con antelación. */
+export const reminderTitle = (block, lead = 0) => (lead > 0
+  ? `En ${lead} min: ${shortTitle(block.t)}`
+  : `¡Toca ${shortTitle(block.t)}!`);
+
 /* ───────── Notificaciones ─────────
  * Web:    se avisa mientras la app está abierta o recién pasada a segundo plano (limitación del navegador).
  * Nativo: se programan las próximas actividades como notificaciones locales; suenan con la app cerrada. */
@@ -109,13 +114,13 @@ export function createNotifier({ settings, getRegistration }) {
       return queue;
     },
 
-    /** Web: aviso inmediato de que acaba de empezar una actividad. */
-    async announce(block) {
+    /** Web: aviso de que una actividad empieza ya (`lead` = 0) o en `lead` minutos. */
+    async announce(block, lead = 0) {
       if (native || !status().enabled) return;
-      const title = `¡Toca ${shortTitle(block.t)}!`;
+      const title = reminderTitle(block, lead);
       const options = {
         body: `${toHHMM(block.s)} – ${toHHMM(block.e)}${shortTitle(block.t) === block.t ? '' : `\n${block.t}`}`,
-        tag: `start-${block.id}`,
+        tag: `start-${block.id}-${lead}`,
         icon: 'icons/icon-192.png',
         badge: 'icons/icon-192.png'
       };
@@ -126,7 +131,7 @@ export function createNotifier({ settings, getRegistration }) {
       } catch (_) { /* algunos navegadores bloquean el constructor */ }
     },
 
-    /** Nativo: reprograma las próximas actividades. `upcoming` = [{ key, block, at }]. */
+    /** Nativo: reprograma los próximos avisos. `upcoming` = [{ key, block, at, lead }] (`at` = cuándo suena). */
     sync(upcoming) {
       if (!native) return Promise.resolve();
       const wanted = status().enabled ? upcoming : [];
@@ -134,9 +139,9 @@ export function createNotifier({ settings, getRegistration }) {
         await cancelAllPending();
         if (!wanted.length) return;
         await (await plugin()).schedule({
-          notifications: wanted.map(({ key, block, at }) => ({
+          notifications: wanted.map(({ key, block, at, lead = 0 }) => ({
             id: hashToInt(`${key}:${block.id}`),
-            title: `¡Toca ${shortTitle(block.t)}!`,
+            title: reminderTitle(block, lead),
             body: `${toHHMM(block.s)} – ${toHHMM(block.e)}`,
             schedule: { at, allowWhileIdle: true }
           }))

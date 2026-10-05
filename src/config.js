@@ -19,8 +19,14 @@ export const LIMITS = Object.freeze({
   titleLength: 80,
   noteLength: 300,
   templates: 20,                        // debe coincidir con firestore.rules
-  templateName: 40
+  templateName: 40,
+  recurring: 40,                        // debe coincidir con firestore.rules
+  subtasks: 15,
+  subtaskLength: 60
 });
+
+/** Minutos de antelación que se pueden elegir para los avisos (0 = al empezar). */
+export const LEAD_OPTIONS = Object.freeze([0, 5, 10, 15, 30]);
 
 /** Semanas que se pueden recorrer hacia atrás y hacia delante desde la actual. */
 export const WEEK_RANGE = Object.freeze({ back: 104, forward: 52 });

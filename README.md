@@ -26,7 +26,7 @@ mi-horario-v2/
 │   ├── config.js           Constantes, plantillas y configuración de Firebase
 │   ├── utils.js            Funciones puras
 │   └── style.css
-├── tests/state-manager.test.js
+├── tests/                  state-manager, templates-copy, recurring-subtasks
 └── .github/workflows/deploy.yml
 ```
 
@@ -52,9 +52,12 @@ npm run preview
    - Escritura con un campo extra, o `updatedAt` que no sea `serverTimestamp()` → denegado.
    - Id de documento `hoy` → denegado.
    - `users/UID/profile/main` con `templates` (lista) y `updatedAt` = `request.time` → permitido solo al propietario.
+   - Igual, añadiendo `recurring` (lista de ≤ 40) → permitido; con `recurring` que no sea una lista → denegado.
    - `users/UID/profile/otro` o con un campo extra → denegado.
 
-Modelo de datos: `users/{uid}/days/{YYYY-MM-DD}` (actividades de cada día) y `users/{uid}/profile/main` (plantillas propias). **Si actualizas la app y no republicas `firestore.rules`, las plantillas funcionan en el dispositivo pero no se sincronizan.**
+Modelo de datos: `users/{uid}/days/{YYYY-MM-DD}` (actividades de cada día) y `users/{uid}/profile/main` (plantillas propias y repeticiones semanales: `{ templates, recurring, updatedAt }`). **Si actualizas la app y no republicas `firestore.rules`, las plantillas y repeticiones funcionan en el dispositivo pero no se sincronizan.**
+
+Repeticiones: los días sin registro se calculan al vuelo a partir de las reglas; un día guardado (aunque esté vacío) nunca se vuelve a rellenar. «Dejar de repetir» y «cambiar la serie» solo afectan de hoy en adelante.
 
 Limitación: las reglas no tienen bucles, así que no pueden validar el contenido de cada bloque, solo la forma del documento y `blocks.size() <= 60`. Cada cliente sanea los bloques; el aislamiento entre usuarios sí es total.
 

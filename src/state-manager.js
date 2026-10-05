@@ -11,7 +11,7 @@
  * Los días son inmutables (arrays congelados): cada cambio crea un array nuevo.
  */
 import {
-  BACKUP, CATEGORIES, LIMITS, MAX_MIN, PRESETS, STORAGE, STREAK_RULES
+  BACKUP, CATEGORIES, LEAD_OPTIONS, LIMITS, MAX_MIN, PRESETS, STORAGE, STREAK_RULES
 } from './config.js';
 import {
   addDays, diffDays, fromHHMM, isDateKey, parseDateKey, startOfDay, toDateKey, toHHMM, uid, weekDates
@@ -21,7 +21,13 @@ const CATEGORY_KEYS = new Set(CATEGORIES.map(c => c.key));
 const BLOCK_ID_RE = /^[\w-]{1,40}$/;
 const PRESET_ID_RE = /^[a-z0-9-]{1,24}$/;
 const TEMPLATE_ID_RE = /^t[a-z0-9]{1,20}$/;
-const BACKUP_SETTING_KEYS = Object.freeze([`${STORAGE.settingPrefix}notify`]);
+/** Ajustes que viajan en la copia de seguridad, cada uno con su validador. */
+const BACKUP_SETTINGS = Object.freeze({
+  [`${STORAGE.settingPrefix}notify`]: value => value === '0' || value === '1',
+  [`${STORAGE.settingPrefix}lead`]: value => /^\d+$/.test(value) && LEAD_OPTIONS.includes(Number(value))
+});
+const BACKUP_SETTING_KEYS = Object.freeze(Object.keys(BACKUP_SETTINGS));
+const RULE_ID_RE = /^r[a-z0-9]{1,20}$/;
 
 export const EMPTY_DAY = Object.freeze([]);
 export const byStart = (a, b) => a.s - b.s || a.e - b.e;
@@ -29,6 +35,16 @@ export const byStart = (a, b) => a.s - b.s || a.e - b.e;
 /* ═══════════════ Validación y saneado ═══════════════ */
 
 const clampMinute = n => Math.min(MAX_MIN, Math.max(0, Math.round(Number(n))));
+
+/** Subtareas de una actividad: [{ t, d }] (vacío si no hay o no son válidas). */
+export function sanitizeSubtasks(raw) {
+  if (!Array.isArray(raw)) return [];
+  return raw.slice(0, LIMITS.subtasks)
+    .map(item => (item && typeof item === 'object' && typeof item.t === 'string'
+      ? { t: item.t.trim().slice(0, LIMITS.subtaskLength), d: item.d === true }
+      : null))
+    .filter(item => item && item.t);
+}
 
 /** Devuelve una actividad limpia o null si los datos no son aprovechables. */
 export function sanitizeBlock(raw) {
@@ -45,6 +61,9 @@ export function sanitizeBlock(raw) {
     d: raw.d === true
   };
   if (typeof raw.p === 'string' && PRESET_ID_RE.test(raw.p)) block.p = raw.p;
+  const k = sanitizeSubtasks(raw.k);
+  if (k.length) block.k = k;
+  if (typeof raw.r === 'string' && RULE_ID_RE.test(raw.r)) block.r = raw.r;   // regla semanal de la que procede
   return block;
 }
 
@@ -60,9 +79,50 @@ export function sanitizeTemplate(raw) {
   const name = typeof raw.name === 'string' ? raw.name.trim().slice(0, LIMITS.templateName) : '';
   if (!name || typeof raw.id !== 'string' || !TEMPLATE_ID_RE.test(raw.id) || !Array.isArray(raw.blocks)) return null;
   const blocks = raw.blocks.slice(0, LIMITS.blocksPerDay).map(sanitizeBlock).filter(Boolean)
-    .sort(byStart).map(({ s, e, t, c }) => ({ s, e, t, c }));
+    .sort(byStart).map(structureOf);
   return blocks.length ? { id: raw.id, name, blocks } : null;
 }
+
+/** Lo que una plantilla o regla conserva de una actividad: horas, título, tipo y subtareas sin marcar. */
+function structureOf(block) {
+  const out = { s: block.s, e: block.e, t: block.t, c: block.c };
+  if (block.k) out.k = block.k.map(item => ({ t: item.t, d: false }));
+  return out;
+}
+
+/* ═══════════════ Repeticiones semanales ═══════════════ */
+
+/** Regla: { id, t, c, s, e, dows:[0-6], from, until?, k? }. Genera una actividad cada semana en esos días. */
+export function sanitizeRule(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !RULE_ID_RE.test(raw.id)) return null;
+  const base = sanitizeBlock({ id: 'x', s: raw.s, e: raw.e, t: raw.t, c: raw.c, k: raw.k });
+  const dows = Array.from(new Set((Array.isArray(raw.dows) ? raw.dows : []).map(Number)
+    .filter(n => Number.isInteger(n) && n >= 0 && n <= 6))).sort((a, b) => a - b);
+  if (!base || !dows.length || !isDateKey(raw.from)) return null;
+  const rule = { id: raw.id, t: base.t, c: base.c, s: base.s, e: base.e, dows, from: raw.from };
+  if (base.k) rule.k = base.k.map(item => ({ t: item.t, d: false }));
+  if (isDateKey(raw.until)) rule.until = raw.until;
+  return rule;
+}
+
+/** ¿Genera la regla una actividad ese día? (las fechas AAAA-MM-DD se comparan como texto) */
+export const ruleAppliesOn = (rule, key) => key >= rule.from
+  && (!rule.until || key <= rule.until)
+  && rule.dows.includes(parseDateKey(key).getDay());
+
+/** Id estable: todos los dispositivos generan la misma actividad para la misma regla y fecha. */
+export const occurrenceId = (rule, key) => `${rule.id}-${key.replace(/-/g, '')}`;
+
+export const occurrenceBlock = (rule, key) => sanitizeBlock({
+  id: occurrenceId(rule, key), s: rule.s, e: rule.e, t: rule.t, c: rule.c, n: '', d: false, k: rule.k, r: rule.id
+});
+
+/** Actividades que las reglas generan para un día (sin guardar). */
+export const expandRules = (rules, key) => rules
+  .filter(rule => ruleAppliesOn(rule, key))
+  .map(rule => occurrenceBlock(rule, key))
+  .filter(Boolean)
+  .sort(byStart);
 
 /** Perfil del usuario (se sincroniza como un único documento). null si no es un objeto. */
 export function sanitizeProfile(raw) {
@@ -72,15 +132,23 @@ export function sanitizeProfile(raw) {
     .map(sanitizeTemplate)
     .filter(t => t && !seen.has(t.id) && seen.add(t.id))
     .slice(0, LIMITS.templates);
-  return { templates };
+  const seenRules = new Set();
+  const recurring = (Array.isArray(raw.recurring) ? raw.recurring : [])
+    .map(sanitizeRule)
+    .filter(rule => rule && !seenRules.has(rule.id) && seenRules.add(rule.id))
+    .slice(0, LIMITS.recurring);
+  return { templates, recurring };
 }
 
+const mergeById = (current, incoming, max) => {
+  const byId = new Map(current.map(item => [item.id, item]));
+  incoming.forEach(item => byId.set(item.id, item));
+  return Array.from(byId.values()).slice(0, max);
+};
+
 /** Fusiona plantillas: las entrantes sustituyen a las que tienen el mismo id; se respeta el máximo. */
-export function mergeTemplates(current, incoming) {
-  const byId = new Map(current.map(t => [t.id, t]));
-  incoming.forEach(t => byId.set(t.id, t));
-  return Array.from(byId.values()).slice(0, LIMITS.templates);
-}
+export const mergeTemplates = (current, incoming) => mergeById(current, incoming, LIMITS.templates);
+export const mergeRules = (current, incoming) => mergeById(current, incoming, LIMITS.recurring);
 
 /** Mensaje de error para el usuario, o null si el borrador es válido. */
 export function validateDraft({ t, s, e }) {
@@ -90,7 +158,12 @@ export function validateDraft({ t, s, e }) {
   return null;
 }
 
-const freezeDay = blocks => Object.freeze(blocks.map(b => Object.freeze({ ...b })));
+const freezeBlock = block => {
+  const copy = { ...block };
+  if (copy.k) copy.k = Object.freeze(copy.k.map(item => Object.freeze({ ...item })));
+  return Object.freeze(copy);
+};
+const freezeDay = blocks => Object.freeze(blocks.map(freezeBlock));
 
 /* ═══════════════ Progreso y rachas ═══════════════ */
 
@@ -220,13 +293,16 @@ export function placeBlocks(existing, candidates) {
 export function instantiatePreset(preset, dow, existing) {
   const rows = preset.rows(dow) || [];
   const candidates = rows
-    .map(([from, to, t, c]) => sanitizeBlock({ id: uid(), s: fromHHMM(from), e: fromHHMM(to), t, c, n: '', d: false, p: preset.id }))
+    .map(([from, to, t, c, subtasks]) => sanitizeBlock({
+      id: uid(), s: fromHHMM(from), e: fromHHMM(to), t, c, n: '', d: false, p: preset.id,
+      k: (subtasks || []).map(text => ({ t: text, d: false }))
+    }))
     .filter(Boolean);
   return placeBlocks(existing, candidates);
 }
 
-/** Próximos inicios de actividad (no hechas), ordenados por hora. Alimenta las notificaciones nativas. */
-export function upcomingStarts({ blocksAt, from, horizonDays, limit }) {
+/** Próximos avisos de actividades no hechas, ordenados por hora. `at` es cuándo debe sonar (inicio − antelación). */
+export function upcomingStarts({ blocksAt, from, horizonDays, limit, lead = 0 }) {
   const out = [];
   for (let i = 0; i <= horizonDays; i++) {
     const date = addDays(from, i);
@@ -234,8 +310,8 @@ export function upcomingStarts({ blocksAt, from, horizonDays, limit }) {
     blocksAt(key).forEach(block => {
       if (block.d) return;
       const at = startOfDay(date);
-      at.setMinutes(block.s);
-      if (at > from) out.push({ key, block, at });
+      at.setMinutes(block.s - lead);   // con antelación, el aviso salta `lead` minutos antes
+      if (at > from) out.push({ key, block, at, lead });
     });
   }
   return out.sort((a, b) => a.at - b.at).slice(0, limit);
@@ -255,10 +331,11 @@ export function findNextPlannedDay({ blocksAt, from, horizonDays = 7 }) {
 export function createStartWatcher(windowMinutes = 2) {
   const seen = new Set();
   return {
-    collect(dateKey, blocks, nowMin) {
+    /** Actividades cuyo aviso acaba de tocar: `lead` minutos antes del inicio (0 = al empezar). */
+    collect(dateKey, blocks, nowMin, lead = 0) {
       return blocks.filter(b => {
-        const age = nowMin - b.s;
-        const id = `${dateKey}:${b.id}`;
+        const age = nowMin - (b.s - lead);
+        const id = `${dateKey}:${b.id}:${lead}`;
         if (age < 0 || age >= windowMinutes || seen.has(id)) return false;
         seen.add(id);
         return true;
@@ -289,11 +366,11 @@ export function parseBackup(text) {
       let blocks = null;
       try { blocks = sanitizeBlocks(JSON.parse(value)); } catch (_) { blocks = null; }
       if (isDateKey(key) && blocks) days.push([key, blocks]);
-    } else if (BACKUP_SETTING_KEYS.includes(storageKey) && (value === '0' || value === '1')) {
+    } else if (BACKUP_SETTINGS[storageKey] && BACKUP_SETTINGS[storageKey](value)) {
       settings.push([storageKey, value]);
     }
   });
-  const hasProfile = Boolean(profile && profile.templates.length);
+  const hasProfile = Boolean(profile && (profile.templates.length || profile.recurring.length));
   if (!days.length && !settings.length && !hasProfile) throw new Error('La copia no contiene datos válidos.');
   return { days, settings, profile: hasProfile ? profile : null };
 }
@@ -369,14 +446,24 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     if (raw === null || raw === undefined) return null;
     try { return sanitizeBlocks(JSON.parse(raw)); } catch (_) { return null; }
   };
+  /** Días sin registro propio: lo que generan las repeticiones semanales (no se guarda hasta que se toca). */
+  const virtualCache = new Map();
   const load = key => {
-    let day = cache.get(key);
-    if (!day) {
-      const stored = parseStored(key);
-      day = stored ? freezeDay(stored) : EMPTY_DAY;
+    const hit = cache.get(key);
+    if (hit) return hit;
+    const stored = parseStored(key);
+    if (stored) {
+      const day = freezeDay(stored);
       cache.set(key, day);
+      return day;
     }
-    return day;
+    let virtual = virtualCache.get(key);
+    if (!virtual) {
+      const generated = expandRules(loadProfile().recurring, key);
+      virtual = generated.length ? freezeDay(generated) : EMPTY_DAY;
+      virtualCache.set(key, virtual);
+    }
+    return virtual;
   };
   const storedKeys = () => storage.keys()
     .filter(k => k.startsWith(STORAGE.dayPrefix))
@@ -414,10 +501,20 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
   };
 
   /* ── Perfil (plantillas propias): un único documento, con el mismo esquema de "pendiente" ── */
+  const freezeStructure = block => {
+    const copy = { ...block };
+    if (copy.k) copy.k = Object.freeze(copy.k.map(item => Object.freeze({ ...item })));
+    return Object.freeze(copy);
+  };
   const freezeProfile = value => Object.freeze({
     templates: Object.freeze(value.templates.map(t => Object.freeze({
-      id: t.id, name: t.name, blocks: Object.freeze(t.blocks.map(b => Object.freeze({ ...b })))
-    })))
+      id: t.id, name: t.name, blocks: Object.freeze(t.blocks.map(freezeStructure))
+    }))),
+    recurring: Object.freeze(value.recurring.map(rule => {
+      const copy = { ...rule, dows: Object.freeze(rule.dows.slice()) };
+      if (copy.k) copy.k = Object.freeze(copy.k.map(item => Object.freeze({ ...item })));
+      return Object.freeze(copy);
+    }))
   });
   let profile = null;
   let profileVersion = 0;
@@ -425,9 +522,14 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     if (!profile) {
       let parsed = null;
       try { parsed = sanitizeProfile(JSON.parse(storage.read(STORAGE.profile))); } catch (_) { parsed = null; }
-      profile = freezeProfile(parsed || { templates: [] });
+      profile = freezeProfile(parsed || { templates: [], recurring: [] });
     }
     return profile;
+  };
+  /** Cambia el perfil en memoria; los días generados por repeticiones se recalculan. */
+  const setProfile = next => {
+    profile = freezeProfile(next);
+    virtualCache.clear();
   };
   const sendProfile = () => {
     profileVersion += 1;
@@ -440,7 +542,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     }, () => { /* queda pendiente */ });
   };
   const commitProfile = (next, origin = 'local') => {
-    profile = freezeProfile(next);
+    setProfile(next);
     storage.write(STORAGE.profile, JSON.stringify(profile));
     sendProfile();
     emit({ type: 'profile', origin });
@@ -457,7 +559,44 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     return frozen;
   };
 
-  const FIELDS = ['t', 's', 'e', 'c', 'n'];
+  const rulesApplyOn = key => loadProfile().recurring.some(rule => ruleAppliesOn(rule, key));
+  const todayKey = () => toDateKey(clock());
+  const dayBefore = key => toDateKey(addDays(parseDateKey(key), -1));
+  const dowOf = key => parseDateKey(key).getDay();
+  const newRuleId = () => `r${uid().slice(1, 13)}`;
+
+  /** Quita el registro de un día (y de la nube). Sin repeticiones, el día vuelve a estar vacío. */
+  const dropDayRecord = key => {
+    storage.remove(dayStorageKey(key));
+    cache.delete(key);
+    send(key, 'del');
+    emit({ type: 'days', keys: [key], origin: 'local' });
+  };
+  /** Guarda las actividades de un día; un día vacío sin repeticiones no necesita registro. */
+  const setDayBlocks = (key, blocks) => {
+    if (blocks.length || rulesApplyOn(key)) commit(key, blocks);
+    else dropDayRecord(key);
+  };
+
+  /** Prepara un cambio de repeticiones que se pueda deshacer: recuerda las reglas y los días que se toquen. */
+  const beginChange = () => {
+    const before = loadProfile().recurring;
+    const days = new Map();
+    return {
+      touch(key) {
+        if (!days.has(key)) days.set(key, { saved: storage.read(dayStorageKey(key)) !== null, blocks: load(key) });
+      },
+      undo() {
+        commitProfile({ ...loadProfile(), recurring: before });
+        days.forEach(({ saved, blocks }, key) => {
+          if (saved) commit(key, blocks);
+          else if (storage.read(dayStorageKey(key)) !== null) dropDayRecord(key);
+        });
+      }
+    };
+  };
+
+  const FIELDS = ['t', 's', 'e', 'c', 'n', 'k'];
   const pickFields = patch => Object.fromEntries(FIELDS.filter(f => f in patch).map(f => [f, patch[f]]));
 
   const api = {
@@ -538,10 +677,9 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     clearDay(key) {
       assertDateKey(key);
       const previous = load(key);
-      storage.remove(dayStorageKey(key));
-      cache.set(key, EMPTY_DAY);
-      send(key, 'del');
-      emit({ type: 'days', keys: [key], origin: 'local' });
+      // Con repeticiones se deja un registro vacío: si no, las actividades repetidas reaparecerían.
+      if (rulesApplyOn(key)) commit(key, []);
+      else dropDayRecord(key);
       return previous;
     },
 
@@ -570,7 +708,9 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       targets.forEach(key => {
         const current = load(key);
         const base = replace ? [] : current;
-        const candidates = source.map(b => sanitizeBlock({ ...b, id: uid(), d: false, n: '' }));
+        const candidates = source.map(b => sanitizeBlock({
+          ...b, id: uid(), d: false, n: '', r: undefined, k: (b.k || []).map(item => ({ t: item.t, d: false }))
+        }));
         const placed = placeBlocks(base, candidates);
         const usable = placed.added.slice(0, Math.max(0, LIMITS.blocksPerDay - base.length));
         skipped += candidates.length - usable.length;
@@ -591,6 +731,136 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       });
     },
 
+    /* Repeticiones semanales (se guardan como reglas en el perfil y se sincronizan) */
+    listRecurring: () => loadProfile().recurring,
+
+    /**
+     * Crea una repetición semanal desde `key` (hoy o una fecha futura). El día de `key` se incluye siempre.
+     * Con `blockId`, esa actividad ya existente pasa a ser la primera de la serie.
+     * Devuelve `undo()` para deshacerlo todo.
+     */
+    addRecurring(key, draft, dows, { blockId = null } = {}) {
+      assertDateKey(key);
+      const error = validateDraft(draft);
+      if (error) return { ok: false, error };
+      const profile0 = loadProfile();
+      if (profile0.recurring.length >= LIMITS.recurring) {
+        return { ok: false, error: `Máximo ${LIMITS.recurring} repeticiones. Quita alguna.` };
+      }
+      const rule = sanitizeRule({
+        id: newRuleId(), t: draft.t, c: draft.c, s: draft.s, e: draft.e, k: draft.k,
+        dows: [...(Array.isArray(dows) ? dows : []), dowOf(key)], from: key
+      });
+      if (!rule) return { ok: false, error: 'La repetición no es válida.' };
+
+      const change = beginChange();
+      commitProfile({ ...profile0, recurring: [...profile0.recurring, rule] });
+
+      // El día elegido: queda guardado con su serie (y la nota que se haya escrito).
+      change.touch(key);
+      const current = load(key);
+      let next;
+      if (blockId) {
+        next = current.map(b => (b.id === blockId ? { ...b, r: rule.id } : b));
+      } else {
+        const note = typeof draft.n === 'string' ? draft.n : '';
+        const has = current.some(b => b.r === rule.id);
+        const own = occurrenceBlock(rule, key);
+        next = has ? current.map(b => (b.r === rule.id ? { ...b, n: note } : b)) : [...current, { ...own, n: note }];
+      }
+      commit(key, next);
+
+      // Resto de días ya guardados que encajan en la serie.
+      storedKeys().filter(k => k !== key && ruleAppliesOn(rule, k)).forEach(k => {
+        const day = load(k);
+        if (day.some(b => b.r === rule.id)) return;
+        const block = occurrenceBlock(rule, k);
+        if (!block || findOverlaps(day, block).length) return;
+        change.touch(k);
+        commit(k, [...day, block]);
+      });
+      return { ok: true, rule, undo: change.undo };
+    },
+
+    /**
+     * Deja de repetir: la serie termina en `afterKey` (inclusive). Nunca se toca el pasado:
+     * si `afterKey` es anterior a ayer, se corta desde hoy.
+     */
+    stopRecurring(ruleId, afterKey) {
+      assertDateKey(afterKey);
+      const rules = loadProfile().recurring;
+      const rule = rules.find(r => r.id === ruleId);
+      if (!rule) return { ok: false };
+      const yesterday = dayBefore(todayKey());
+      const until = afterKey < yesterday ? yesterday : afterKey;
+      const change = beginChange();
+      const next = rule.from > until
+        ? rules.filter(r => r.id !== ruleId)
+        : rules.map(r => (r.id === ruleId ? { ...r, until: r.until && r.until < until ? r.until : until } : r));
+      commitProfile({ ...loadProfile(), recurring: next });
+      storedKeys().filter(k => k > until).forEach(k => {
+        const day = load(k);
+        const rest = day.filter(b => !(b.r === ruleId && !b.d));
+        if (rest.length === day.length) return;
+        change.touch(k);
+        setDayBlocks(k, rest);
+      });
+      return { ok: true, until, undo: change.undo };
+    },
+
+    /**
+     * Cambia la serie "desde `fromKey` en adelante" (como en un calendario): la regla anterior termina el día
+     * antes y nace una nueva con los datos cambiados. El pasado no se modifica (como mínimo, desde hoy).
+     */
+    changeRecurring(ruleId, fromKey, patch) {
+      assertDateKey(fromKey);
+      const profile0 = loadProfile();
+      const old = profile0.recurring.find(r => r.id === ruleId);
+      if (!old) return { ok: false, error: 'La repetición ya no existe.' };
+      const start = fromKey < todayKey() ? todayKey() : fromKey;
+      if (old.until && start > old.until) return { ok: false, error: 'Esa repetición ya terminó.' };
+      const merged = {
+        t: 't' in patch ? patch.t : old.t,
+        c: 'c' in patch ? patch.c : old.c,
+        s: 's' in patch ? patch.s : old.s,
+        e: 'e' in patch ? patch.e : old.e,
+        k: 'k' in patch ? patch.k : old.k,
+        dows: 'dows' in patch ? patch.dows : old.dows
+      };
+      const error = validateDraft(merged);
+      if (error) return { ok: false, error };
+      const created = sanitizeRule({ id: newRuleId(), ...merged, from: start, until: old.until });
+      if (!created) return { ok: false, error: 'La repetición no es válida.' };
+      const keepsOld = start > old.from;
+      if (profile0.recurring.length + (keepsOld ? 1 : 0) > LIMITS.recurring) {
+        return { ok: false, error: `Máximo ${LIMITS.recurring} repeticiones. Quita alguna.` };
+      }
+
+      const change = beginChange();
+      const closed = keepsOld ? { ...old, until: dayBefore(start) } : null;
+      commitProfile({
+        ...profile0,
+        recurring: profile0.recurring.flatMap(r => (r.id !== ruleId ? [r] : closed ? [closed, created] : [created]))
+      });
+
+      storedKeys().filter(k => k >= start && (!old.until || k <= old.until)).sort().forEach(k => {
+        const day = load(k);
+        const pending = day.find(b => b.r === ruleId && !b.d);
+        let next = day;
+        if (pending) {
+          const rest = day.filter(b => b !== pending);
+          next = ruleAppliesOn(created, k) ? [...rest, { ...occurrenceBlock(created, k), n: pending.n }] : rest;
+        } else if (!day.some(b => b.r === ruleId) && ruleAppliesOn(created, k) && !old.dows.includes(dowOf(k))) {
+          const block = occurrenceBlock(created, k);   // día de la semana añadido a la serie
+          if (block && !findOverlaps(day, block).length) next = [...day, block];
+        }
+        if (next === day) return;
+        change.touch(k);
+        setDayBlocks(k, next);
+      });
+      return { ok: true, rule: created, undo: change.undo };
+    },
+
     /* Plantillas propias (se sincronizan en el perfil) */
     listTemplates: () => loadProfile().templates,
 
@@ -606,10 +876,10 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       const template = sanitizeTemplate({
         id: `t${uid().slice(1, 13)}`,
         name: clean,
-        blocks: day.map(({ s, e, t, c }) => ({ s, e, t, c }))
+        blocks: day.map(structureOf)
       });
       if (!template) return { ok: false, error: 'No se pudo crear la plantilla.' };
-      commitProfile({ templates: [...templates, template] });
+      commitProfile({ ...loadProfile(), templates: [...templates, template] });
       return { ok: true, template };
     },
 
@@ -617,7 +887,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       const templates = loadProfile().templates;
       const removed = templates.find(t => t.id === id);
       if (!removed) return { ok: false };
-      commitProfile({ templates: templates.filter(t => t.id !== id) });
+      commitProfile({ ...loadProfile(), templates: templates.filter(t => t.id !== id) });
       return { ok: true, removed };
     },
 
@@ -625,7 +895,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       const clean = sanitizeTemplate(template);
       const templates = loadProfile().templates;
       if (!clean || templates.some(t => t.id === clean.id) || templates.length >= LIMITS.templates) return { ok: false };
-      commitProfile({ templates: [...templates, clean] });
+      commitProfile({ ...loadProfile(), templates: [...templates, clean] });
       return { ok: true };
     },
 
@@ -669,7 +939,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       assertDateKey(key);
       const template = loadProfile().templates.find(t => t.id === presetId);
       const preset = template
-        ? { id: template.id, rows: () => template.blocks.map(b => [toHHMM(b.s), toHHMM(b.e), b.t, b.c]) }
+        ? { id: template.id, rows: () => template.blocks.map(b => [toHHMM(b.s), toHHMM(b.e), b.t, b.c, (b.k || []).map(item => item.t)]) }
         : PRESETS.find(p => p.id === presetId);
       if (!preset) return { ok: false, error: 'Plantilla desconocida.' };
       const current = load(key);
@@ -697,7 +967,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       return summarizeWeek(weekDates(now).map(d => load(toDateKey(d))));
     },
     nextPlannedDay: (now = clock()) => findNextPlannedDay({ blocksAt: load, from: now }),
-    upcomingStarts: (from, horizonDays, limit) => upcomingStarts({ blocksAt: load, from, horizonDays, limit }),
+    upcomingStarts: (from, horizonDays, limit, lead = 0) => upcomingStarts({ blocksAt: load, from, horizonDays, limit, lead }),
 
     /* Sincronización con la nube */
 
@@ -710,7 +980,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
         if (blocks === null) {
           if (storage.read(dayStorageKey(key)) === null) return;
           storage.remove(dayStorageKey(key));
-          cache.set(key, EMPTY_DAY);
+          cache.delete(key);
           changed = true;
           return;
         }
@@ -742,8 +1012,13 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       if (remote === null || remote === undefined || isProfileDirty()) return false;
       const clean = sanitizeProfile(remote);
       if (!clean) return false;
+      // Datos remotos corruptos (campo que no es lista, o lista cuyo contenido no sirve): nunca vaciar lo local.
+      const corrupt = ['templates', 'recurring'].some(field => (
+        remote[field] != null && (!Array.isArray(remote[field]) || (remote[field].length > 0 && !clean[field].length))
+      ));
+      if (corrupt) return false;
       if (JSON.stringify(clean) === JSON.stringify(loadProfile())) return false;
-      profile = freezeProfile(clean);
+      setProfile(clean);
       storage.write(STORAGE.profile, JSON.stringify(profile));
       emit({ type: 'profile', origin: 'remote' });
       return true;
@@ -751,7 +1026,8 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
 
     /** Primera lectura completa del perfil: sube lo pendiente o lo que solo existe en este dispositivo. */
     reconcileProfile(remoteExists) {
-      if (isProfileDirty() || (!remoteExists && loadProfile().templates.length)) sendProfile();
+      const local = loadProfile();
+      if (isProfileDirty() || (!remoteExists && (local.templates.length || local.recurring.length))) sendProfile();
     },
 
     /* Sesión: a qué cuenta pertenecen los datos locales */
@@ -766,6 +1042,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       storage.remove(STORAGE.profile);
       storage.remove(STORAGE.profileDirty);
       profile = null;
+      virtualCache.clear();
       cache.clear();
       versions.clear();
       emit({ type: 'reset', origin: 'local' });
@@ -784,7 +1061,8 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       const data = {};
       storedKeys().forEach(key => { data[dayStorageKey(key)] = storage.read(dayStorageKey(key)); });
       BACKUP_SETTING_KEYS.forEach(k => { const v = storage.read(k); if (v !== null) data[k] = v; });
-      if (loadProfile().templates.length) data[STORAGE.profile] = JSON.stringify(loadProfile());
+      const { templates, recurring } = loadProfile();
+      if (templates.length || recurring.length) data[STORAGE.profile] = JSON.stringify(loadProfile());
       return { app: BACKUP.app, version: BACKUP.version, exportedAt: new Date().toISOString(), data };
     },
 
@@ -797,11 +1075,15 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
         send(key, 'put');
       });
       settings.forEach(([k, v]) => storage.write(k, v));
-      if (imported && imported.templates.length) {
-        commitProfile({ templates: mergeTemplates(loadProfile().templates, imported.templates) }, 'import');
+      if (imported) {
+        const current = loadProfile();
+        commitProfile({
+          templates: mergeTemplates(current.templates, imported.templates),
+          recurring: mergeRules(current.recurring, imported.recurring)
+        }, 'import');
       }
       emit({ type: 'days', keys: days.map(([key]) => key), origin: 'import' });
-      return { days: days.length, templates: imported ? imported.templates.length : 0 };
+      return { days: days.length, templates: imported ? imported.templates.length : 0, recurring: imported ? imported.recurring.length : 0 };
     }
   };
 

@@ -5,7 +5,7 @@
  * No contiene reglas de negocio (state-manager.js), ni acceso a Firebase (firebase-service.js),
  * ni HTML (ui-components.js), ni detalles web/nativos (platform.js).
  */
-import { FIREBASE_CONFIG, NOTIFICATIONS, WEEK_RANGE } from './config.js';
+import { FIREBASE_CONFIG, LEAD_OPTIONS, LIMITS, NOTIFICATIONS, WEEK_RANGE } from './config.js';
 import {
   createBrowserStorage, createStartWatcher, createStateManager, describeDay, findOverlaps, parseBackup
 } from './state-manager.js';
@@ -54,6 +54,7 @@ function createContext() {
     daySheet: sheets.register($('sheetDay')),
     copySheet: sheets.register($('sheetCopy')),
     templatesSheet: sheets.register($('sheetTemplates')),
+    repeatsSheet: sheets.register($('sheetRepeats')),
     view: { selectedDow: clock().getDay(), weekOffset: 0, sorting: false, dateKey: toDateKey(clock()), minuteKey: '', stale: false },
     account: { status: 'loading', email: '', uid: '' },
     analytics: 'off',       // off | on | unsupported
@@ -263,7 +264,15 @@ function setupList(ctx) {
 
 /* ═════════════ Editor de actividad ═════════════ */
 
-const editor = { key: null, id: null, category: 'libre' };
+const editor = {
+  key: null, id: null, category: 'libre',
+  subtasks: [],            // copia de trabajo de las subtareas de la actividad
+  rule: null,              // serie semanal a la que pertenece la actividad editada (si sigue vigente)
+  repeat: false,           // interruptor "repetir" / "aplicar a las próximas semanas"
+  dows: new Set()          // días de la semana de la repetición
+};
+
+const dowOfKey = key => new Date(`${key}T12:00:00`).getDay();
 
 /** Avisa en vivo si el tramo elegido choca con otras actividades; guardar sigue siendo posible. */
 function refreshOverlapWarning(ctx) {
@@ -274,6 +283,19 @@ function refreshOverlapWarning(ctx) {
   if (!others.length) return;
   const named = others.slice(0, 2).map(b => `«${shortTitle(b.t)}» (${toHHMM(b.s)}–${toHHMM(b.e)})`).join(' y ');
   $('fWarn').textContent = `Se solapa con ${named}${others.length > 2 ? ` y ${others.length - 2} más` : ''}.`;
+}
+
+function renderSubtasks() {
+  $('fK').innerHTML = ui.subtasksMarkup(editor.subtasks);
+  $('fKadd').disabled = editor.subtasks.length >= LIMITS.subtasks;
+  $('fKnew').disabled = editor.subtasks.length >= LIMITS.subtasks;
+}
+
+function renderRepeat() {
+  const locked = dowOfKey(editor.key);
+  $('repSwitch').setAttribute('aria-checked', editor.repeat);
+  $('repDays').hidden = !editor.repeat;
+  $('repDays').innerHTML = ui.weekdayChipsMarkup({ selected: editor.dows, locked });
 }
 
 function openEditor(ctx, id) {
@@ -299,6 +321,28 @@ function openEditor(ctx, id) {
     $('fN').value = '';
     selectCategory('libre');
   }
+
+  editor.subtasks = block && block.k ? block.k.map(item => ({ ...item })) : [];
+  $('fKnew').value = '';
+  renderSubtasks();
+
+  // Repetición: una actividad de una serie vigente se puede cambiar "para las próximas semanas" o dejar de repetir.
+  const rule = block && block.r ? ctx.state.listRecurring().find(r => r.id === block.r) : null;
+  editor.rule = rule && (!rule.until || key <= rule.until) ? rule : null;
+  editor.repeat = false;
+  editor.dows = new Set(editor.rule ? editor.rule.dows : [dowOfKey(key)]);
+  const canRepeat = key >= toDateKey(ctx.clock()) || Boolean(editor.rule);
+  $('fRep').hidden = !canRepeat;
+  $('repStop').hidden = !editor.rule;
+  if (editor.rule) {
+    $('repTitle').textContent = 'Aplicar a las próximas semanas';
+    $('repHint').textContent = `Se repite cada semana (${ui.weekdaysLabel(editor.rule.dows)}). Por defecto, los cambios afectan solo a este día.`;
+  } else {
+    $('repTitle').textContent = 'Repetir cada semana';
+    $('repHint').textContent = 'Se creará sola en los días que elijas, también en las semanas siguientes.';
+  }
+  renderRepeat();
+
   refreshOverlapWarning(ctx);
   ctx.editSheet.open();
   if (!block) $('fT').focus();
@@ -319,6 +363,7 @@ function selectCategory(key) {
 }
 
 function setupEditor(ctx) {
+  const { state, toast } = ctx;
   $('fC').innerHTML = ui.categoryChipsMarkup();
   $('fC').addEventListener('click', e => {
     const chip = e.target.closest('.chip');
@@ -330,20 +375,80 @@ function setupEditor(ctx) {
     $(id).addEventListener('change', () => refreshOverlapWarning(ctx));
   });
 
+  /* Subtareas */
+  const addSubtask = () => {
+    const text = $('fKnew').value.trim();
+    if (!text || editor.subtasks.length >= LIMITS.subtasks) return;
+    editor.subtasks.push({ t: text.slice(0, LIMITS.subtaskLength), d: false });
+    $('fKnew').value = '';
+    renderSubtasks();
+    $('fKnew').focus();
+  };
+  $('fKadd').addEventListener('click', addSubtask);
+  $('fKnew').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addSubtask(); } });
+  $('fK').addEventListener('click', e => {
+    const row = e.target.closest('.sub-row');
+    if (!row) return;
+    const index = Number(row.dataset.i);
+    if (e.target.closest('.sub-ck')) editor.subtasks[index].d = !editor.subtasks[index].d;
+    else if (e.target.closest('.sub-x')) editor.subtasks.splice(index, 1);
+    else return;
+    renderSubtasks();
+  });
+
+  /* Repetición */
+  $('repSwitch').addEventListener('click', () => { editor.repeat = !editor.repeat; renderRepeat(); });
+  $('repDays').addEventListener('click', e => {
+    const chip = e.target.closest('.chip.dow');
+    if (!chip || chip.disabled) return;
+    const dow = Number(chip.dataset.dow);
+    if (editor.dows.has(dow)) editor.dows.delete(dow); else editor.dows.add(dow);
+    renderRepeat();
+  });
+  $('repStop').addEventListener('click', () => {
+    if (!editor.rule) return;
+    const result = state.stopRecurring(editor.rule.id, editor.key);
+    if (!result.ok) { showEditorError('La repetición ya no existe.'); return; }
+    ctx.cloud.track('recurring_stopped');
+    ctx.editSheet.close();
+    toast.show(result.until === editor.key ? 'Ya no se repetirá después de este día.' : 'Ya no se repetirá desde hoy.', {
+      label: 'Deshacer', duration: 7000, onAction: result.undo
+    });
+  });
+
   $('saveBtn').addEventListener('click', () => {
     const draft = {
       t: $('fT').value.trim(),
       s: fromHHMM($('fS').value),
       e: fromHHMM($('fE').value),
       c: editor.category,
-      n: $('fN').value.trim()
+      n: $('fN').value.trim(),
+      k: editor.subtasks
     };
-    const result = editor.id
-      ? ctx.state.updateBlock(editor.key, editor.id, draft)
-      : ctx.state.addBlock(editor.key, draft);
+    const dows = Array.from(editor.dows);
+    let result;
+    let series = null;
+    if (editor.id) {
+      result = state.updateBlock(editor.key, editor.id, draft);
+      if (result.ok && editor.repeat) {
+        series = editor.rule
+          ? state.changeRecurring(editor.rule.id, editor.key, { t: draft.t, c: draft.c, s: draft.s, e: draft.e, k: draft.k, dows })
+          : state.addRecurring(editor.key, draft, dows, { blockId: editor.id });
+      }
+    } else if (editor.repeat) {
+      result = series = state.addRecurring(editor.key, draft, dows);
+    } else {
+      result = state.addBlock(editor.key, draft);
+    }
     if (!result.ok) { showEditorError(result.error); return; }
-    ctx.cloud.track('activity_saved', { is_new: !editor.id });
+    if (series && !series.ok) { showEditorError(series.error); return; }
+    ctx.cloud.track('activity_saved', { is_new: !editor.id, repeats: Boolean(series), subtasks: draft.k.length > 0 });
     ctx.editSheet.close();
+    if (series) {
+      toast.show(editor.rule ? 'Cambio aplicado a las próximas semanas.' : `Se repetirá cada semana (${ui.weekdaysLabel(series.rule.dows)}).`, {
+        label: 'Deshacer', duration: 7000, onAction: series.undo
+      });
+    }
   });
   $('cancelBtn').addEventListener('click', ctx.editSheet.close);
   $('delBtn').addEventListener('click', () => {
@@ -389,6 +494,19 @@ function setupDayMenu(ctx) {
   $('closeDay').addEventListener('click', ctx.daySheet.close);
   $('menuCopy').addEventListener('click', () => openCopy(ctx));
   $('menuTemplates').addEventListener('click', () => openTemplates(ctx));
+  $('menuRepeats').addEventListener('click', () => { refreshRepeats(ctx); ctx.repeatsSheet.open(); });
+  $('closeRepeats').addEventListener('click', ctx.repeatsSheet.close);
+  $('repList').addEventListener('click', e => {
+    const button = e.target.closest('button[data-act="stop"]');
+    if (!button) return;
+    const result = state.stopRecurring(button.dataset.id, toDateKey(addDays(ctx.clock(), -1)));
+    if (!result.ok) return;
+    ctx.cloud.track('recurring_stopped');
+    refreshRepeats(ctx);
+    toast.show('Ya no se repetirá desde hoy.', {
+      label: 'Deshacer', duration: 7000, onAction: () => { result.undo(); refreshRepeats(ctx); }
+    });
+  });
 
   /* Copiar */
   $('copyTargets').addEventListener('click', e => {
@@ -469,8 +587,16 @@ function setupDayMenu(ctx) {
 
   // Un cambio llegado de otro dispositivo mientras la hoja está abierta.
   state.subscribe(change => {
-    if (change.type === 'profile' && $('sheetTemplates').classList.contains('open')) refreshTemplates();
+    if (change.type !== 'profile') return;
+    if ($('sheetTemplates').classList.contains('open')) refreshTemplates();
+    if ($('sheetRepeats').classList.contains('open')) refreshRepeats(ctx);
   });
+}
+
+/** Lista de repeticiones vigentes (las ya terminadas no se muestran). */
+function refreshRepeats(ctx) {
+  const today = toDateKey(ctx.clock());
+  $('repList').innerHTML = ui.repeatsMarkup(ctx.state.listRecurring().filter(r => !r.until || r.until >= today));
 }
 
 function openTemplates(ctx) {
@@ -514,6 +640,12 @@ function describeAnalytics(ctx) {
   return { on: ctx.state.settings.getFlag('analytics'), disabled: false, text: 'Envía datos anónimos de uso a Google Analytics, nunca tus actividades ni tus notas.' };
 }
 
+/** Minutos de antelación del aviso elegidos en este dispositivo (0 = al empezar). */
+function leadOf(ctx) {
+  const v = Number(ctx.state.settings.get('lead'));
+  return LEAD_OPTIONS.includes(v) ? v : 0;
+}
+
 function setupSettings(ctx) {
   const { state, notifier, cloud, toast } = ctx;
   const install = createInstallPrompt(() => refreshSettings());
@@ -523,6 +655,13 @@ function setupSettings(ctx) {
     $('notifySwitch').setAttribute('aria-checked', n.on);
     $('notifySwitch').disabled = n.disabled;
     $('notifyStatus').textContent = n.text;
+
+    const lead = leadOf(ctx);
+    $('leadSelect').value = String(lead);
+    $('leadSelect').disabled = !notifier.status().enabled;
+    $('leadStatus').textContent = lead === 0
+      ? 'Te aviso justo cuando empieza cada actividad.'
+      : `Te aviso ${lead} min antes de que empiece cada actividad.`;
 
     const a = describeAnalytics(ctx);
     $('analyticsSwitch').setAttribute('aria-checked', a.on);
@@ -549,6 +688,15 @@ function setupSettings(ctx) {
   $('notifySwitch').addEventListener('click', async () => {
     if (notifier.status().enabled) await notifier.disable();
     else await notifier.enable();
+    refreshSettings();
+    ctx.syncNative();
+  });
+
+  $('leadSelect').innerHTML = LEAD_OPTIONS
+    .map(v => `<option value="${v}">${v === 0 ? 'Al empezar' : `${v} min antes`}</option>`).join('');
+  $('leadSelect').addEventListener('change', e => {
+    const v = Number(e.target.value);
+    state.settings.set('lead', LEAD_OPTIONS.includes(v) ? v : 0);
     refreshSettings();
     ctx.syncNative();
   });
@@ -748,18 +896,21 @@ function setupClock(ctx) {
   /** En nativo se reprograman las próximas notificaciones locales (suenan con la app cerrada). */
   ctx.syncNative = debounce(() => {
     if (!ctx.native) return;
-    notifier.sync(state.upcomingStarts(ctx.clock(), NOTIFICATIONS.nativeHorizonDays, NOTIFICATIONS.nativeMaxPending));
+    notifier.sync(state.upcomingStarts(ctx.clock(), NOTIFICATIONS.nativeHorizonDays, NOTIFICATIONS.nativeMaxPending, leadOf(ctx)));
   }, 600);
 
-  const announce = block => {
-    if (!ctx.native && notifier.status().enabled) notifier.announce(block);
-    else if (!document.hidden) toast.show(`Ahora: ${shortTitle(block.t)}`, { duration: 6000 });
+  const announce = (block, lead = 0) => {
+    if (!ctx.native && notifier.status().enabled) notifier.announce(block, lead);
+    else if (!document.hidden) {
+      toast.show(lead > 0 ? `En ${lead} min: ${shortTitle(block.t)}` : `Ahora: ${shortTitle(block.t)}`, { duration: 6000 });
+    }
   };
 
   const checkStarts = (now, silent) => {
     const key = toDateKey(now);
-    const started = watcher.collect(key, state.getDay(key), minutesOfDay(now));
-    if (!silent && !isGated(ctx)) started.forEach(announce);
+    const lead = notifier.status().enabled ? leadOf(ctx) : 0;
+    const started = watcher.collect(key, state.getDay(key), minutesOfDay(now), lead);
+    if (!silent && !isGated(ctx)) started.forEach(b => announce(b, lead));
   };
 
   function tick(force = false) {

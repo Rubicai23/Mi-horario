@@ -89,7 +89,26 @@
     <label class="f"><span>Fin</span><input id="fE" type="time"></label>
   </div>
   <div class="chips" id="fC" role="group" aria-label="Tipo de actividad"></div>
+  <div class="f subs">
+    <span>Subtareas</span>
+    <ul class="sub-list" id="fK"></ul>
+    <div class="sub-add">
+      <input id="fKnew" type="text" maxlength="60" placeholder="Añadir subtarea" autocomplete="off" enterkeyhint="done" aria-label="Nueva subtarea">
+      <button type="button" class="btn2" id="fKadd">Añadir</button>
+    </div>
+  </div>
   <label class="f"><span>Lo que hice</span><textarea id="fN" rows="3" maxlength="300" placeholder="Anota aquí lo que hiciste"></textarea></label>
+  <div class="rep" id="fRep" hidden>
+    <div class="set-row slim rep-row">
+      <div>
+        <div class="set-t" id="repTitle">Repetir cada semana</div>
+        <p class="set-s" id="repHint"></p>
+      </div>
+      <button type="button" class="switch" id="repSwitch" role="switch" aria-checked="false" aria-label="Repetir cada semana"><i></i></button>
+    </div>
+    <div class="chips" id="repDays" role="group" aria-label="Días de la semana" hidden></div>
+    <button type="button" class="link rep-stop" id="repStop" hidden>Dejar de repetir</button>
+  </div>
   <p class="warn" id="fWarn" role="status" hidden></p>
   <p class="err" id="fErr" role="alert" hidden></p>
   <button class="btn" id="saveBtn">Guardar</button>
@@ -106,6 +125,7 @@
   <div class="menu">
     <button class="menu-item" id="menuCopy"><b>Copiar a otros días</b><small>Repite este día en otros de esta semana o de la siguiente.</small></button>
     <button class="menu-item" id="menuTemplates"><b>Plantillas</b><small>Guarda este día como plantilla o añade una de las tuyas.</small></button>
+    <button class="menu-item" id="menuRepeats"><b>Repeticiones</b><small>Actividades que se crean solas cada semana.</small></button>
   </div>
   <button class="btn2 block" id="closeDay">Cerrar</button>
 </section>
@@ -144,6 +164,14 @@
   <button class="btn" id="closeTpl">Hecho</button>
 </section>
 
+<!-- Repeticiones semanales -->
+<section class="sheet" id="sheetRepeats" role="dialog" aria-modal="true" aria-labelledby="srTitle">
+  <h2 id="srTitle">Repeticiones</h2>
+  <p class="set-s menu-sub">Actividades que se crean solas cada semana. Para crear una, activa «Repetir cada semana» al añadir una actividad.</p>
+  <div id="repList"></div>
+  <button class="btn" id="closeRepeats">Hecho</button>
+</section>
+
 <!-- Ajustes -->
 <section class="sheet" id="sheetSettings" role="dialog" aria-modal="true" aria-labelledby="stTitle">
   <h2 id="stTitle">Ajustes</h2>
@@ -154,6 +182,14 @@
       <p class="set-s" id="notifyStatus"></p>
     </div>
     <button class="switch" id="notifySwitch" role="switch" aria-checked="false" aria-label="Avisos de actividad"><i></i></button>
+  </div>
+
+  <div class="set-row">
+    <div>
+      <div class="set-t">Avisar con antelación</div>
+      <p class="set-s" id="leadStatus"></p>
+    </div>
+    <select class="select" id="leadSelect" aria-label="Antelación del aviso"></select>
   </div>
 
   <div class="set-row">

@@ -315,6 +315,39 @@ button { font-family: inherit; }
 .switch[aria-checked="true"] i { transform: translateX(20px); }
 .switch:disabled { opacity: .45; cursor: default; }
 
+/* Subtareas, repeticiones y aviso con antelación */
+.meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 3px; }
+.mt { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.mt svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.subs > span { margin-bottom: 8px; }
+.sub-list { list-style: none; margin: 0; padding: 0; }
+.sub-row { display: flex; align-items: center; gap: 4px; min-height: 44px; border-bottom: 1px solid var(--line); }
+.sub-t { flex: 1; min-width: 0; font-size: 15px; line-height: 1.35; overflow-wrap: anywhere; }
+.sub-row.done .sub-t { color: var(--muted); text-decoration: line-through; }
+.sub-ck, .sub-x { appearance: none; border: 0; background: transparent; cursor: pointer; flex: none; display: grid; place-items: center; width: 40px; height: 40px; color: var(--muted); }
+.sub-x { font-size: 22px; line-height: 1; }
+.sub-ck .ring { width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--muted); display: grid; place-items: center; }
+.sub-ck .ring svg { width: 11px; height: 11px; stroke: #fff; stroke-width: 2.2; fill: none; opacity: 0; }
+.sub-ck[aria-pressed="true"] .ring { background: var(--accent); border-color: var(--accent); }
+.sub-ck[aria-pressed="true"] .ring svg { opacity: 1; }
+.sub-add { display: flex; gap: 8px; margin-top: 10px; }
+.sub-add input {
+  flex: 1; min-width: 0; font-family: inherit; font-size: 16px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; min-height: 44px; -webkit-appearance: none; appearance: none;
+}
+.sub-add input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+.sub-add .btn2 { flex: none; padding: 10px 14px; }
+.rep { margin-bottom: 8px; }
+.rep-row { margin: 0 0 8px; padding-bottom: 8px; }
+.rep-stop { display: block; margin: 0 0 8px; padding-left: 0; }
+.chip.dow { min-width: 42px; justify-content: center; }
+.chip.dow:disabled { opacity: .6; cursor: default; }
+.select {
+  flex: none; max-width: 150px; font-family: inherit; font-size: 15px; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; min-height: 44px;
+}
+.select:disabled { opacity: .5; }
+
 /* Menú del día, copiar día y plantillas propias */
 .menu-sub { margin: -10px 0 16px; }
 .menu { display: grid; gap: 10px; margin-bottom: 14px; }

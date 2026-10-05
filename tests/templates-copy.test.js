@@ -153,7 +153,7 @@ test('sanitizeProfile: descarta plantillas inválidas y duplicadas y respeta el 
   assert.equal(sanitizeProfile({ templates: many }).templates.length, LIMITS.templates);
   const dup = sanitizeProfile({ templates: [many[0], many[0], { id: 'malo' }] });
   assert.equal(dup.templates.length, 1);
-  assert.deepEqual(sanitizeProfile({}), { templates: [] });
+  assert.deepEqual(sanitizeProfile({}), { templates: [], recurring: [] });
   assert.equal(sanitizeProfile('x'), null);
 });
 
