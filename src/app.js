@@ -5,7 +5,10 @@
  * No contiene reglas de negocio (state-manager.js), ni acceso a Firebase (firebase-service.js),
  * ni HTML (ui-components.js), ni detalles web/nativos (platform.js).
  */
-import { FIREBASE_CONFIG, LEAD_OPTIONS, LIMITS, NOTIFICATIONS, STREAK_RULES, WEEK_RANGE } from './config.js';
+import {
+  ACCENTS, CATEGORIES, CATEGORY_COLORS, DEFAULT_ACCENT, FIREBASE_CONFIG, LEAD_OPTIONS, LIMITS, MONTH_RANGE, NOTIFICATIONS,
+  STREAK_RULES, THEMES, WEEK_RANGE
+} from './config.js';
 import {
   createBrowserStorage, createStartWatcher, createStateManager, describeDay, findOverlaps, parseBackup
 } from './state-manager.js';
@@ -56,6 +59,8 @@ function createContext() {
     templatesSheet: sheets.register($('sheetTemplates')),
     repeatsSheet: sheets.register($('sheetRepeats')),
     badgesSheet: sheets.register($('sheetBadges')),
+    catsSheet: sheets.register($('sheetCats')),
+    deleteSheet: sheets.register($('sheetDelete')),
     view: { selectedDow: clock().getDay(), weekOffset: 0, sorting: false, dateKey: toDateKey(clock()), minuteKey: '', stale: false },
     account: { status: 'loading', email: '', uid: '' },
     analytics: 'off',       // off | on | unsupported
@@ -80,6 +85,41 @@ const limitCustom = (presets, max) => {
 
 /* ═════════════ Render ═════════════ */
 
+/* ═════════════ Aspecto y categorías propias ═════════════ */
+
+/** Tema (automático/claro/oscuro) y color de acento de este dispositivo. */
+function applyAppearance(ctx) {
+  const root = document.documentElement;
+  const theme = ctx.state.settings.get('theme');
+  const accent = ctx.state.settings.get('accent');
+  if (theme === 'light' || theme === 'dark') root.dataset.theme = theme; else delete root.dataset.theme;
+  if (ACCENTS.some(a => a.key === accent) && accent !== DEFAULT_ACCENT) root.dataset.accent = accent; else delete root.dataset.accent;
+  // Barra de estado del móvil: si el tema está forzado, los dos avisos de color apuntan al mismo fondo.
+  document.querySelectorAll('meta[name="theme-color"]').forEach(meta => {
+    if (!meta.dataset.original) meta.dataset.original = meta.getAttribute('content');
+    meta.setAttribute('content', theme === 'dark' ? '#121413' : theme === 'light' ? '#F2F3F0' : meta.dataset.original);
+  });
+}
+
+/** Nombres y colores propios de las categorías: variables CSS en la raíz y nombres en la capa de vistas. */
+function applyCategories(ctx) {
+  const cats = ctx.state.getCategories();
+  const signature = JSON.stringify(cats);
+  if (signature === ctx.catSignature) return;
+  ctx.catSignature = signature;
+  const root = document.documentElement;
+  const names = {};
+  CATEGORIES.forEach(({ key }) => {
+    const own = cats[key] || {};
+    if (own.c && CATEGORY_COLORS[own.c]) root.style.setProperty(`--c-${key}`, CATEGORY_COLORS[own.c]);
+    else root.style.removeProperty(`--c-${key}`);
+    if (own.l) names[key] = own.l;
+  });
+  ui.setCategoryNames(names);
+  $('fC').innerHTML = ui.categoryChipsMarkup();
+  selectCategory(editor.category);
+}
+
 function createRenderer(ctx) {
   const { state, view } = ctx;
   let frame = 0;
@@ -98,6 +138,7 @@ function createRenderer(ctx) {
 
   function render(now = ctx.clock()) {
     view.stale = false;
+    applyCategories(ctx);
     const anchor = anchorOf(ctx, now);
     const dates = weekDates(anchor);
     const date = dates.find(d => d.getDay() === view.selectedDow) || anchor;
@@ -644,14 +685,92 @@ function openTemplates(ctx) {
 /* ═════════════ Estadísticas ═════════════ */
 
 function setupStats(ctx) {
-  $('openStats').addEventListener('click', () => {
+  const stats = { mode: 'week', month: 0 };
+
+  function paint() {
     const now = ctx.clock();
-    $('statsRange').textContent = ui.weekRangeLabel(weekDates(now));
-    $('statsBody').innerHTML = ui.statsMarkup(ctx.state.weekSummary(now));
+    const month = stats.mode === 'month';
+    const focused = document.activeElement && document.activeElement.id;
+    $('statsTabWeek').setAttribute('aria-selected', String(!month));
+    $('statsTabMonth').setAttribute('aria-selected', String(month));
+    $('statsNav').hidden = !month;
+    $('statsRange').hidden = month;
+    if (!month) {
+      $('sgTitle').textContent = 'Esta semana';
+      $('statsRange').textContent = ui.weekRangeLabel(weekDates(now));
+      $('statsBody').innerHTML = ui.statsMarkup(ctx.state.weekSummary(now));
+      return;
+    }
+    const result = ctx.state.monthSummary(now, stats.month);
+    const name = new Date(result.year, result.month, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const label = name.charAt(0).toUpperCase() + name.slice(1);
+    $('sgTitle').textContent = stats.month === 0 ? 'Este mes' : label;
+    $('statsNav').innerHTML = ui.monthNavMarkup({
+      label, isCurrent: stats.month === 0, canPrev: stats.month > -MONTH_RANGE.back, canNext: stats.month < MONTH_RANGE.forward
+    });
+    $('statsBody').innerHTML = ui.statsMarkup(result.summary, { empty: 'Sin actividades este mes.' })
+      + ui.monthDaysMarkup({ counted: result.countedDays, met: result.metDays });
+    const again = focused && $(focused);
+    if (again && again.closest('#statsNav') && !again.disabled) again.focus();
+  }
+
+  $('openStats').addEventListener('click', () => {
+    Object.assign(stats, { mode: 'week', month: 0 });
+    paint();
     ctx.cloud.track('view_stats');
     ctx.statsSheet.open();
   });
+  $('statsTabWeek').addEventListener('click', () => { stats.mode = 'week'; paint(); });
+  $('statsTabMonth').addEventListener('click', () => { stats.mode = 'month'; paint(); ctx.cloud.track('view_stats_month'); });
+  $('statsNav').addEventListener('click', e => {
+    const button = e.target.closest('button');
+    if (!button || button.disabled) return;
+    stats.month += button.id === 'statsPrev' ? -1 : 1;
+    paint();
+  });
   $('closeStats').addEventListener('click', ctx.statsSheet.close);
+}
+
+/* ═════════════ Categorías propias ═════════════ */
+
+function setupCategories(ctx) {
+  const { state, toast } = ctx;
+  const paint = () => { $('catList').innerHTML = ui.categoriesMarkup(state.getCategories()); };
+
+  $('openCats').addEventListener('click', () => { paint(); ctx.catsSheet.open(); });
+
+  $('catList').addEventListener('click', e => {
+    const swatch = e.target.closest('[data-cat][data-color]');
+    if (!swatch) return;
+    state.setCategory(swatch.dataset.cat, { color: swatch.dataset.color });
+    swatch.parentElement.querySelectorAll('.swatch').forEach(el => {
+      const on = el === swatch;
+      el.classList.toggle('sel', on);
+      el.setAttribute('aria-pressed', String(on));
+    });
+  });
+
+  const saveName = input => {
+    const key = input.dataset.catName;
+    const current = (state.getCategories()[key] || {}).l || '';
+    const next = input.value.replace(/\s+/g, ' ').trim();
+    if (next === current) return;
+    state.setCategory(key, { label: next });
+  };
+  $('catList').addEventListener('change', e => { if (e.target.matches('[data-cat-name]')) saveName(e.target); });
+
+  $('catsReset').addEventListener('click', () => {
+    const result = state.resetCategories();
+    if (!result.changed) { toast.show('Ya están los nombres y colores originales.'); return; }
+    paint();
+    toast.show('Categorías restauradas', { label: 'Deshacer', onAction: () => { result.undo(); if ($('sheetCats').classList.contains('open')) paint(); } });
+  });
+
+  $('closeCats').addEventListener('click', () => {
+    $('catList').querySelectorAll('[data-cat-name]').forEach(saveName); // por si no llegó a perderse el foco
+    ctx.refreshSettings();
+    ctx.settingsSheet.open();
+  });
 }
 
 /* ═════════════ Ajustes: avisos, estadísticas de uso, copia de seguridad, instalación ═════════════ */
@@ -699,6 +818,13 @@ function setupSettings(ctx) {
       ? 'Te aviso justo cuando empieza cada actividad.'
       : `Te aviso ${lead} min antes de que empiece cada actividad.`;
 
+    const theme = state.settings.get('theme');
+    const accent = state.settings.get('accent');
+    const themeNow = THEMES.some(t => t.key === theme) ? theme : 'auto';
+    const accentNow = ACCENTS.some(a => a.key === accent) ? accent : DEFAULT_ACCENT;
+    $('themeChips').innerHTML = ui.themeChipsMarkup(themeNow);
+    $('accentChips').innerHTML = ui.accentSwatchesMarkup(accentNow);
+
     const streak = state.getStreakConfig();
     $('goalSelect').value = String(streak.goal);
     $('goalStatus').textContent = `Completa el ${streak.goal} % de las actividades de un día para sumar a tu racha.`;
@@ -735,6 +861,19 @@ function setupSettings(ctx) {
     refreshSettings();
     ctx.syncNative();
   });
+
+  const chooseAppearance = (container, attribute, name) => e => {
+    const selector = `[data-${attribute}]`;
+    const button = e.target.closest(selector);
+    if (!button) return;
+    state.settings.set(name, button.dataset[attribute]);
+    applyAppearance(ctx);
+    refreshSettings();
+    const again = $(container).querySelector(`[data-${attribute}="${button.dataset[attribute]}"]`);
+    if (again) again.focus();
+  };
+  $('themeChips').addEventListener('click', chooseAppearance('themeChips', 'theme', 'theme'));
+  $('accentChips').addEventListener('click', chooseAppearance('accentChips', 'accent', 'accent'));
 
   $('goalSelect').innerHTML = STREAK_RULES.goalOptions.map(v => `<option value="${v}">${v} %</option>`).join('');
   $('goalSelect').addEventListener('change', e => {
@@ -891,6 +1030,35 @@ function setupAccount(ctx) {
     }
   });
 
+  /* Eliminar cuenta: contraseña de nuevo, borrado en la nube y después en este dispositivo */
+  const showDeleteError = message => { $('delErr').textContent = message || ''; $('delErr').hidden = !message; };
+  const backToSettings = () => { ctx.refreshSettings(); ctx.settingsSheet.open(); };
+  $('deleteAccountBtn').addEventListener('click', () => {
+    $('delPass').value = '';
+    showDeleteError('');
+    ctx.deleteSheet.open();
+  });
+  $('delCancel').addEventListener('click', backToSettings);
+  $('delConfirm').addEventListener('click', async () => {
+    const password = $('delPass').value;
+    if (!password) { showDeleteError('Escribe tu contraseña para confirmar.'); return; }
+    showDeleteError('');
+    const buttons = [$('delConfirm'), $('delCancel')];
+    buttons.forEach(b => { b.disabled = true; });
+    try {
+      await cloud.deleteAccount(password);
+      state.clearLocalData();
+      $('delPass').value = '';
+      ctx.deleteSheet.close();
+      refreshGate(ctx);
+      toast.show('Cuenta eliminada. Se han borrado tus datos.', { duration: 9000 });
+    } catch (err) {
+      showDeleteError(err.message || 'No se pudo eliminar la cuenta.');
+    } finally {
+      buttons.forEach(b => { b.disabled = false; });
+    }
+  });
+
   /* Estado de la sesión */
   cloud.onState(next => {
     ctx.account = next;
@@ -1022,12 +1190,14 @@ function setupBadges(ctx) {
 
 function main() {
   const ctx = createContext();
+  applyAppearance(ctx);
   createRenderer(ctx);
   setupNavigation(ctx);
   setupList(ctx);
   setupEditor(ctx);
   setupDayMenu(ctx);
   setupBadges(ctx);
+  setupCategories(ctx);
   setupStats(ctx);
   setupSettings(ctx);
   setupAccount(ctx);

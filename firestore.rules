@@ -43,12 +43,17 @@ service cloud.firestore {
     }
 
     // ───────────── users/{uid}/profile/main ─────────────
-    // Un único documento por usuario con sus plantillas propias.
+    // Un único documento por usuario con sus plantillas propias, repeticiones semanales, días de descanso, ajustes de racha e insignias.
     function isValidProfile(data) {
-      return data.keys().hasOnly(['templates', 'updatedAt'])
+      return data.keys().hasOnly(['templates', 'recurring', 'rest', 'streak', 'badges', 'cats', 'updatedAt'])
         && data.keys().hasAll(['templates', 'updatedAt'])
         && data.templates is list
         && data.templates.size() <= 20         // mismo límite que LIMITS.templates en config.js
+        && (!('recurring' in data) || (data.recurring is list && data.recurring.size() <= 40))  // LIMITS.recurring
+        && (!('rest' in data) || (data.rest is list && data.rest.size() <= 400))                // LIMITS.restDays
+        && (!('streak' in data) || (data.streak is map && data.streak.size() <= 2))             // { goal, days }
+        && (!('badges' in data) || (data.badges is map && data.badges.size() <= 40))            // LIMITS.badges
+        && (!('cats' in data) || (data.cats is map && data.cats.size() <= 6))                   // una por categoría
         && data.updatedAt is timestamp
         && data.updatedAt == request.time;
     }

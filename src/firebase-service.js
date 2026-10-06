@@ -4,18 +4,19 @@
  *
  * Modelo de datos:
  *   users/{uid}/days/{YYYY-MM-DD}  →  { blocks: [...], updatedAt: serverTimestamp }
- *   users/{uid}/profile/main       →  { templates, recurring, rest, streak, badges, updatedAt: serverTimestamp }
+ *   users/{uid}/profile/main       →  { templates, recurring, rest, streak, badges, cats, updatedAt: serverTimestamp }
  *
  * Estados de cuenta: loading → signedIn | signedOut | unavailable
  */
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
-  browserLocalPersistence, createUserWithEmailAndPassword, indexedDBLocalPersistence, initializeAuth,
-  onAuthStateChanged, sendPasswordResetEmail, signInWithEmailAndPassword, signOut
+  EmailAuthProvider, browserLocalPersistence, createUserWithEmailAndPassword, deleteUser, indexedDBLocalPersistence,
+  initializeAuth, onAuthStateChanged, reauthenticateWithCredential, sendPasswordResetEmail, signInWithEmailAndPassword,
+  signOut
 } from 'firebase/auth';
 import {
-  collection, deleteDoc, doc, initializeFirestore, memoryLocalCache, onSnapshot, persistentLocalCache,
-  persistentMultipleTabManager, persistentSingleTabManager, serverTimestamp, setDoc
+  collection, deleteDoc, doc, getDocsFromServer, initializeFirestore, memoryLocalCache, onSnapshot, persistentLocalCache,
+  persistentMultipleTabManager, persistentSingleTabManager, serverTimestamp, setDoc, writeBatch
 } from 'firebase/firestore';
 
 const AUTH_MESSAGES = Object.freeze({
@@ -34,6 +35,9 @@ const AUTH_MESSAGES = Object.freeze({
   'auth/admin-restricted-operation': 'El registro de cuentas nuevas está desactivado en Firebase → Authentication → Configuración.',
   'auth/invalid-api-key': 'La clave de API de Firebase no es válida. Revisa la configuración.',
   'auth/api-key-not-valid': 'La clave de API de Firebase no es válida. Revisa la configuración.',
+  'auth/requires-recent-login': 'Por seguridad, cierra sesión, vuelve a entrar e inténtalo otra vez.',
+  'unavailable': 'Sin conexión. Conéctate a internet e inténtalo de nuevo.',
+  'permission-denied': 'La nube rechazó la operación. Revisa que las reglas de Firestore estén publicadas.',
   'auth/internal-error': 'Error interno de Firebase. Inténtalo de nuevo en un momento.'
 });
 
@@ -162,6 +166,36 @@ export function createCloudService({ config, native = false }) {
     async signOut() {
       try { await signOut(requireAuth()); } catch (err) { throw toAuthError(err); }
     },
+    /**
+     * Borra la cuenta: pide la contraseña otra vez, elimina todos los datos de la nube (días y perfil) y,
+     * por último, el usuario. Si algo falla a medias se puede repetir sin problema.
+     */
+    async deleteAccount(password) {
+      const current = requireAuth().currentUser;
+      if (!current || !db || !current.email) throw new Error('No hay una sesión iniciada.');
+      try {
+        await reauthenticateWithCredential(current, EmailAuthProvider.credential(current.email, password));
+      } catch (err) {
+        const code = err && err.code;
+        if (code === 'auth/invalid-credential' || code === 'auth/wrong-password') throw Object.assign(new Error('Contraseña incorrecta.'), { code });
+        throw toAuthError(err);
+      }
+      const { uid } = current;
+      try {
+        stopListeners();
+        const snapshot = await getDocsFromServer(collection(db, 'users', uid, 'days'));
+        const refs = snapshot.docs.map(d => d.ref).concat(profileRef(uid));
+        for (let i = 0; i < refs.length; i += 400) {
+          const batch = writeBatch(db);
+          refs.slice(i, i + 400).forEach(ref => batch.delete(ref));
+          await batch.commit();
+        }
+        await deleteUser(current);
+      } catch (err) {
+        if (user) { watchDays(); watchProfile(); } // la cuenta sigue ahí: se vuelve a escuchar
+        throw toAuthError(err);
+      }
+    },
     async resetPassword(email) {
       try { await sendPasswordResetEmail(requireAuth(), email); } catch (err) {
         if (err && err.code === 'auth/user-not-found') return; // no revelamos si el correo existe
@@ -194,6 +228,7 @@ export function createCloudService({ config, native = false }) {
           rest: JSON.parse(JSON.stringify(profile.rest || [])),
           streak: JSON.parse(JSON.stringify(profile.streak || { goal: 80, days: [0, 1, 2, 3, 4, 5, 6] })),
           badges: JSON.parse(JSON.stringify(profile.badges || {})),
+          cats: JSON.parse(JSON.stringify(profile.cats || {})),
           updatedAt: serverTimestamp()
         });
         return true;

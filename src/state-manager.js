@@ -11,7 +11,7 @@
  * Los días son inmutables (arrays congelados): cada cambio crea un array nuevo.
  */
 import {
-  BACKUP, BADGES, CATEGORIES, LEAD_OPTIONS, LIMITS, MAX_MIN, PRESETS, STORAGE, STREAK_RULES
+  ACCENTS, BACKUP, BADGES, CATEGORIES, CATEGORY_COLORS, LEAD_OPTIONS, LIMITS, MAX_MIN, PRESETS, STORAGE, STREAK_RULES, THEMES
 } from './config.js';
 import {
   addDays, diffDays, fromHHMM, isDateKey, parseDateKey, startOfDay, toDateKey, toHHMM, uid, weekDates
@@ -24,7 +24,9 @@ const TEMPLATE_ID_RE = /^t[a-z0-9]{1,20}$/;
 /** Ajustes que viajan en la copia de seguridad, cada uno con su validador. */
 const BACKUP_SETTINGS = Object.freeze({
   [`${STORAGE.settingPrefix}notify`]: value => value === '0' || value === '1',
-  [`${STORAGE.settingPrefix}lead`]: value => /^\d+$/.test(value) && LEAD_OPTIONS.includes(Number(value))
+  [`${STORAGE.settingPrefix}lead`]: value => /^\d+$/.test(value) && LEAD_OPTIONS.includes(Number(value)),
+  [`${STORAGE.settingPrefix}theme`]: value => THEMES.some(t => t.key === value),
+  [`${STORAGE.settingPrefix}accent`]: value => ACCENTS.some(a => a.key === value)
 });
 const BACKUP_SETTING_KEYS = Object.freeze(Object.keys(BACKUP_SETTINGS));
 const RULE_ID_RE = /^r[a-z0-9]{1,20}$/;
@@ -124,6 +126,22 @@ export const expandRules = (rules, key) => rules
   .filter(Boolean)
   .sort(byStart);
 
+/** Nombre y color propios de las categorías: { clase: { l: 'Mates', c: 'rojo' } }. Solo valores permitidos. */
+export function sanitizeCategories(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  CATEGORIES.forEach(({ key }) => {
+    const item = raw[key];
+    if (!item || typeof item !== 'object') return;
+    const entry = {};
+    const label = typeof item.l === 'string' ? item.l.replace(/\s+/g, ' ').trim().slice(0, LIMITS.categoryLabel) : '';
+    if (label) entry.l = label;
+    if (typeof item.c === 'string' && Object.hasOwn(CATEGORY_COLORS, item.c)) entry.c = item.c;
+    if (entry.l || entry.c) out[key] = entry;
+  });
+  return out;
+}
+
 /** Perfil del usuario (se sincroniza como un único documento). null si no es un objeto. */
 export function sanitizeProfile(raw) {
   if (!raw || typeof raw !== 'object') return null;
@@ -148,13 +166,15 @@ export function sanitizeProfile(raw) {
     .sort(([a], [b]) => (a < b ? -1 : 1))
     .slice(0, LIMITS.badges));
   if (Object.keys(badges).length) profile.badges = badges;
+  const cats = sanitizeCategories(raw.cats);
+  if (Object.keys(cats).length) profile.cats = cats;
   return profile;
 }
 
 /** ¿Tiene el perfil algo que guardar o sincronizar? */
 export const profileHasData = profile => Boolean(profile && (
   profile.templates.length || profile.recurring.length || (profile.rest && profile.rest.length)
-  || profile.streak || (profile.badges && Object.keys(profile.badges).length)
+  || profile.streak || (profile.badges && Object.keys(profile.badges).length) || (profile.cats && Object.keys(profile.cats).length)
 ));
 
 /** Une dos mapas de insignias: se queda la fecha más antigua de cada una. */
@@ -349,6 +369,24 @@ export function summarizeWeek(blocksPerDay) {
     if (b.d) entry.done += b.e - b.s;
     return acc;
   }, {});
+}
+
+/** Resumen de un mes natural: tiempo por categoría y días con objetivo cumplido (sin comparar con otros meses). */
+export function summarizeMonth({ blocksAt, year, month, config = DEFAULT_STREAK, rest = NO_REST }) {
+  const length = new Date(year, month + 1, 0).getDate();
+  const perDay = [];
+  let counted = 0;
+  let met = 0;
+  for (let d = 1; d <= length; d++) {
+    const date = new Date(year, month, d);
+    const key = toDateKey(date);
+    const blocks = blocksAt(key);
+    perDay.push(blocks);
+    if (!blocks.length || !countsForStreak(key, date.getDay(), config, rest)) continue;
+    counted += 1;
+    if (dayProgress(blocks, config.goal).met) met += 1;
+  }
+  return { year, month, summary: summarizeWeek(perDay), countedDays: counted, metDays: met };
 }
 
 /** Recoloca las actividades en el orden dado conservando la duración de cada una. */
@@ -615,6 +653,9 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     if (value.rest && value.rest.length) out.rest = Object.freeze(value.rest.slice());
     if (value.streak) out.streak = Object.freeze({ goal: value.streak.goal, days: Object.freeze(value.streak.days.slice()) });
     if (value.badges && Object.keys(value.badges).length) out.badges = Object.freeze({ ...value.badges });
+    if (value.cats && Object.keys(value.cats).length) {
+      out.cats = Object.freeze(Object.fromEntries(Object.entries(value.cats).map(([k, v]) => [k, Object.freeze({ ...v })])));
+    }
     return Object.freeze(out);
   };
   let profile = null;
@@ -1106,6 +1147,30 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       return { ok: true, changed: true, undo: () => api.setRestDay(key, !on) };
     },
 
+    /* Categorías con nombre y color propios (se sincronizan con el perfil) */
+    getCategories: () => loadProfile().cats || {},
+    setCategory(key, patch = {}) {
+      if (!CATEGORIES.some(c => c.key === key)) return { ok: false };
+      const current = loadProfile().cats || {};
+      const entry = { ...(current[key] || {}) };
+      if ('label' in patch) entry.l = patch.label;
+      if ('color' in patch) entry.c = patch.color;
+      const cats = sanitizeCategories({ ...current, [key]: entry });
+      const next = { ...loadProfile() };
+      if (Object.keys(cats).length) next.cats = cats;
+      else delete next.cats;
+      commitProfile(next);
+      return { ok: true };
+    },
+    resetCategories() {
+      const previous = loadProfile().cats;
+      if (!previous || !Object.keys(previous).length) return { ok: true, changed: false };
+      const next = { ...loadProfile() };
+      delete next.cats;
+      commitProfile(next);
+      return { ok: true, changed: true, undo: () => commitProfile({ ...loadProfile(), cats: previous }) };
+    },
+
     /* Insignias: se calculan con el historial; al lograrlas se guardan con su fecha */
     checkBadges(now = clock()) {
       const stats = badgeStats({ blocksAt: load, keys: storedKeys().sort(), today: now, config: streakConfig(), rest: restSet() });
@@ -1125,6 +1190,12 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     },
     weekSummary(now = clock()) {
       return summarizeWeek(weekDates(now).map(d => load(toDateKey(d))));
+    },
+    monthSummary(now = clock(), offset = 0) {
+      const target = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      return summarizeMonth({
+        blocksAt: load, year: target.getFullYear(), month: target.getMonth(), config: streakConfig(), rest: restSet()
+      });
     },
     nextPlannedDay: (now = clock()) => findNextPlannedDay({ blocksAt: load, from: now }),
     upcomingStarts: (from, horizonDays, limit, lead = 0) => upcomingStarts({ blocksAt: load, from, horizonDays, limit, lead }),
@@ -1184,6 +1255,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
         ...clean,
         rest: remote.rest == null ? local.rest : clean.rest,
         streak: remote.streak == null ? local.streak : clean.streak,
+        cats: remote.cats == null ? local.cats : clean.cats,
         badges: unionBadges(local.badges, clean.badges)
       });
       const extraBadges = Object.keys(merged.badges || {}).length > Object.keys(clean.badges || {}).length;
@@ -1255,6 +1327,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
           recurring: mergeRules(current.recurring, imported.recurring),
           rest: Array.from(new Set([...(current.rest || []), ...(imported.rest || [])])),
           streak: current.streak || imported.streak,
+          cats: { ...imported.cats, ...current.cats },
           badges: unionBadges(current.badges, imported.badges)
         }), 'import');
       }

@@ -5,12 +5,17 @@
  * No conoce el estado de la app ni Firebase: recibe datos ya calculados y devuelve cadenas o
  * llama a las funciones que le pasan. Todo texto de usuario se escapa con escapeHtml.
  */
-import { CATEGORIES, DAY_LETTERS, DAY_NAMES } from './config.js';
+import { ACCENTS, CATEGORIES, CATEGORY_COLORS, DAY_LETTERS, DAY_NAMES, DEFAULT_CATEGORY_COLOR, THEMES } from './config.js';
 import {
   addDays, escapeHtml, formatDuration, formatLongDate, formatShortDate, formatTotal, pad, parseDateKey, plural, toDateKey, toHHMM
 } from './utils.js';
 
 export const $ = id => document.getElementById(id);
+
+/** Nombres propios de las categorías (los define el usuario; si falta uno se usa el original). */
+let categoryNames = {};
+export const setCategoryNames = map => { categoryNames = { ...map }; };
+export const categoryName = key => categoryNames[key] || (CATEGORIES.find(c => c.key === key) || {}).label || key;
 
 const CATEGORY_BY_KEY = Object.freeze(Object.fromEntries(CATEGORIES.map(c => [c.key, c])));
 
@@ -288,25 +293,56 @@ export function repeatsMarkup(rules) {
 /* ── Editor y estadísticas ── */
 
 export const categoryChipsMarkup = () => CATEGORIES.map(c => (
-  `<button type="button" class="chip" data-c="${c.key}" style="--dot:${c.color}"><i></i>${c.label}</button>`
+  `<button type="button" class="chip" data-c="${c.key}" style="--dot:${c.color}"><i></i>${escapeHtml(categoryName(c.key))}</button>`
 )).join('');
 
 export const weekRangeLabel = dates => `${formatShortDate(dates[0])} – ${formatShortDate(dates[6])}`;
 
-export function statsMarkup(summary) {
+export function statsMarkup(summary, { empty = 'Sin actividades esta semana.' } = {}) {
   const rows = CATEGORIES
     .map(c => ({ ...c, planned: (summary[c.key] || {}).planned || 0, done: (summary[c.key] || {}).done || 0 }))
     .filter(r => r.planned > 0)
     .sort((a, b) => b.planned - a.planned);
-  if (!rows.length) return '<p class="set-s">Sin actividades esta semana.</p>';
+  if (!rows.length) return `<p class="set-s">${escapeHtml(empty)}</p>`;
   const max = rows[0].planned;
   const total = rows.reduce((t, r) => ({ planned: t.planned + r.planned, done: t.done + r.done }), { planned: 0, done: 0 });
   return `<div class="stat-total"><b>${formatTotal(total.done)}</b>hechas de ${formatTotal(total.planned)} planificadas</div>` +
     rows.map(r => `<div class="stat" style="--dot:${r.color}">` +
-      `<div class="stat-h"><span>${r.label}</span><span>${formatTotal(r.done)} de ${formatTotal(r.planned)}</span></div>` +
+      `<div class="stat-h"><span>${escapeHtml(categoryName(r.key))}</span><span>${formatTotal(r.done)} de ${formatTotal(r.planned)}</span></div>` +
       `<div class="track"><i class="plan" style="width:${(r.planned / max * 100).toFixed(1)}%"></i><i style="width:${(r.done / max * 100).toFixed(1)}%"></i></div></div>`
     ).join('');
 }
+
+/** Navegación entre meses de las estadísticas (mismo aspecto que la de semanas). */
+export const monthNavMarkup = ({ label, canPrev, canNext, isCurrent }) => (
+  `<button class="wk-btn" id="statsPrev" aria-label="Mes anterior"${canPrev ? '' : ' disabled'}>${ICONS.left}</button>` +
+  `<div class="wk-title"><b>${escapeHtml(label)}</b><small>${isCurrent ? 'Este mes' : '&nbsp;'}</small></div>` +
+  `<button class="wk-btn" id="statsNext" aria-label="Mes siguiente"${canNext ? '' : ' disabled'}>${ICONS.right}</button>`
+);
+
+export const monthDaysMarkup = ({ counted, met }) => (counted
+  ? `<p class="set-s month-days"><b>${met}</b> de ${plural(counted, 'día con actividades', 'días con actividades')} cumplieron la meta.</p>`
+  : '');
+
+/** Aspecto: tema y color de acento. */
+export const themeChipsMarkup = current => THEMES.map(t => (
+  `<button type="button" class="chip${t.key === current ? ' sel' : ''}" data-theme="${t.key}" aria-pressed="${t.key === current}">${t.label}</button>`
+)).join('');
+export const accentSwatchesMarkup = current => ACCENTS.map(a => (
+  `<button type="button" class="swatch${a.key === current ? ' sel' : ''}" data-accent="${a.key}" style="--sw:${a.swatch}" aria-pressed="${a.key === current}" aria-label="${a.label}"></button>`
+)).join('');
+
+/** Hoja de categorías: nombre editable y paleta de colores por categoría. */
+export const categoriesMarkup = cats => CATEGORIES.map(c => {
+  const own = cats[c.key] || {};
+  const selected = own.c || DEFAULT_CATEGORY_COLOR[c.key];
+  const swatches = Object.entries(CATEGORY_COLORS).map(([id, hex]) => (
+    `<button type="button" class="swatch sm${id === selected ? ' sel' : ''}" data-cat="${c.key}" data-color="${id}" style="--sw:${hex}" aria-pressed="${id === selected}" aria-label="${escapeHtml(id)}"></button>`
+  )).join('');
+  return `<div class="cat-row"><label class="f"><span>${escapeHtml(c.label)}</span>` +
+    `<input type="text" data-cat-name="${c.key}" maxlength="20" value="${escapeHtml(own.l || '')}" placeholder="${escapeHtml(c.label)}" autocomplete="off"></label>` +
+    `<div class="swatches" role="group" aria-label="Color de ${escapeHtml(c.label)}">${swatches}</div></div>`;
+}).join('');
 
 /* ═══════════════ Componentes con comportamiento ═══════════════ */
 

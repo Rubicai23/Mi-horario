@@ -68,6 +68,7 @@
         <button class="btn2" type="button" id="signUpBtn">Crear cuenta</button>
       </div>
       <button class="link" type="button" id="forgotBtn">¿Olvidaste la contraseña?</button>
+      <p class="set-s legal-note">Al crear una cuenta aceptas los <a href="privacidad.html#terminos" target="_blank" rel="noopener">términos de uso</a> y la <a href="privacidad.html#privacidad" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </form>
     <button class="btn2 block" type="button" id="retryBtn" hidden>Reintentar</button>
   </div>
@@ -173,6 +174,28 @@
   <button class="btn" id="closeRepeats">Hecho</button>
 </section>
 
+<!-- Categorías -->
+<section class="sheet" id="sheetCats" role="dialog" aria-modal="true" aria-labelledby="scaTitle">
+  <h2 id="scaTitle">Categorías</h2>
+  <p class="set-s menu-sub">Elige el nombre y el color que quieras. Se aplican en toda la app y se sincronizan con tu cuenta.</p>
+  <div id="catList"></div>
+  <div class="set-btns">
+    <button class="btn2" type="button" id="catsReset">Restaurar originales</button>
+  </div>
+  <button class="btn" id="closeCats">Hecho</button>
+</section>
+
+<!-- Eliminar cuenta -->
+<section class="sheet" id="sheetDelete" role="dialog" aria-modal="true" aria-labelledby="sdelTitle">
+  <h2 id="sdelTitle">Eliminar cuenta</h2>
+  <p class="set-s menu-sub">Se borrarán para siempre tu cuenta y todos tus datos en la nube: horarios, plantillas, repeticiones, insignias y ajustes. También se vaciará este dispositivo. No se puede deshacer.</p>
+  <p class="set-s menu-sub">Si quieres conservar algo, cancela y usa antes «Exportar» en la copia de seguridad.</p>
+  <label class="f"><span>Escribe tu contraseña para confirmar</span><input id="delPass" type="password" autocomplete="current-password"></label>
+  <p class="err" id="delErr" role="alert" hidden></p>
+  <button class="btn danger-btn" id="delConfirm">Eliminar para siempre</button>
+  <div class="sub"><button id="delCancel">Cancelar</button></div>
+</section>
+
 <!-- Insignias -->
 <section class="sheet" id="sheetBadges" role="dialog" aria-modal="true" aria-labelledby="sbTitle">
   <h2 id="sbTitle">Insignias</h2>
@@ -214,6 +237,21 @@
     <div class="chips" id="streakDays" role="group" aria-label="Días que cuentan para la racha"></div>
   </div>
 
+  <div class="set-block">
+    <div class="set-t">Aspecto</div>
+    <p class="set-s">Solo de este dispositivo.</p>
+    <div class="chips" id="themeChips" role="group" aria-label="Tema"></div>
+    <div class="swatches" id="accentChips" role="group" aria-label="Color de acento"></div>
+  </div>
+
+  <div class="set-row">
+    <div>
+      <div class="set-t">Categorías</div>
+      <p class="set-s">Cambia el nombre y el color de cada categoría.</p>
+    </div>
+    <button class="btn2" type="button" id="openCats">Editar</button>
+  </div>
+
   <div class="set-row">
     <div>
       <div class="set-t">Estadísticas de uso</div>
@@ -227,6 +265,7 @@
     <p class="set-s" id="accountStatus">Conectando con la nube…</p>
     <div class="set-btns" id="accountOut" hidden>
       <button class="btn2" type="button" id="signOutBtn">Cerrar sesión</button>
+      <button class="btn2 danger" type="button" id="deleteAccountBtn">Eliminar cuenta</button>
     </div>
   </div>
 
@@ -246,12 +285,19 @@
     <div class="set-btns"><button class="btn2" id="installBtn" hidden>Instalar</button></div>
   </div>
 
+  <p class="set-s legal-note"><a href="privacidad.html#privacidad" target="_blank" rel="noopener">Política de privacidad</a> · <a href="privacidad.html#terminos" target="_blank" rel="noopener">Términos de uso</a></p>
+
   <button class="btn" id="closeSettings">Hecho</button>
 </section>
 
 <!-- Estadísticas -->
 <section class="sheet" id="sheetStats" role="dialog" aria-modal="true" aria-labelledby="sgTitle">
   <h2 id="sgTitle">Esta semana</h2>
+  <div class="seg" role="tablist" aria-label="Periodo">
+    <button type="button" role="tab" id="statsTabWeek" aria-selected="true">Semana</button>
+    <button type="button" role="tab" id="statsTabMonth" aria-selected="false">Mes</button>
+  </div>
+  <div class="weeknav" id="statsNav" hidden></div>
   <p class="set-s range" id="statsRange"></p>
   <div id="statsBody"></div>
   <p class="set-s foot-note">Cuenta como hecho lo que marcas con el círculo de cada actividad.</p>

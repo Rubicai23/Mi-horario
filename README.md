@@ -26,7 +26,7 @@ mi-horario-v2/
 │   ├── config.js           Constantes, plantillas y configuración de Firebase
 │   ├── utils.js            Funciones puras
 │   └── style.css
-├── tests/                  state-manager, templates-copy, recurring-subtasks, streak-badges
+├── tests/                  state-manager, templates-copy, recurring-subtasks, streak-badges, categories-month
 └── .github/workflows/deploy.yml
 ```
 
@@ -53,12 +53,18 @@ npm run preview
    - Id de documento `hoy` → denegado.
    - `users/UID/profile/main` con `templates` (lista) y `updatedAt` = `request.time` → permitido solo al propietario.
    - Igual, añadiendo `recurring` (lista de ≤ 40) → permitido; con `recurring` que no sea una lista → denegado.
-   - Igual, añadiendo `rest` (lista ≤ 400), `streak` (mapa `{goal, days}`) y `badges` (mapa ≤ 40) → permitido; con `streak` que no sea un mapa → denegado.
+   - Igual, añadiendo `rest` (lista ≤ 400), `streak` (mapa `{goal, days}`) `badges` (mapa ≤ 40) y `cats` (mapa ≤ 6) → permitido; con `streak` que no sea un mapa → denegado.
    - `users/UID/profile/otro` o con un campo extra → denegado.
 
-Modelo de datos: `users/{uid}/days/{YYYY-MM-DD}` (actividades de cada día) y `users/{uid}/profile/main` (plantillas propias y repeticiones semanales: `{ templates, recurring, rest, streak, badges, updatedAt }`). **Si actualizas la app y no republicas `firestore.rules`, las plantillas y repeticiones funcionan en el dispositivo pero no se sincronizan.**
+Modelo de datos: `users/{uid}/days/{YYYY-MM-DD}` (actividades de cada día) y `users/{uid}/profile/main` (plantillas propias y repeticiones semanales: `{ templates, recurring, rest, streak, badges, cats, updatedAt }`). **Si actualizas la app y no republicas `firestore.rules`, las plantillas y repeticiones funcionan en el dispositivo pero no se sincronizan.**
 
 Racha: la meta (50–100 %) y los días de la semana que cuentan van en `streak`; los días de descanso manuales (solo hoy o futuros) en `rest`; las insignias conseguidas, con su fecha, en `badges` (solo se ganan: al sincronizar se unen, nunca se pierden). Los días de descanso y los días que no cuentan no suman ni rompen la racha ni cuentan como hueco.
+
+Categorías: `cats` guarda, por categoría, un nombre propio (`l`, máx. 20 caracteres) y un color elegido de una paleta fija (`c`, el nombre del color, nunca un valor libre). El tema (claro/oscuro/automático) y el color de acento son de cada dispositivo y no se sincronizan.
+
+Eliminar cuenta (Ajustes → Cuenta): pide la contraseña, borra de Firestore todos los días y el perfil y, por último, el usuario de Authentication. Si falla a medias se puede repetir.
+
+Textos legales: `public/privacidad.html` (política de privacidad y términos). **Antes de publicar en una tienda, añade tu correo de contacto** en el comentario que hay al principio del archivo.
 
 Repeticiones: los días sin registro se calculan al vuelo a partir de las reglas; un día guardado (aunque esté vacío) nunca se vuelve a rellenar. «Dejar de repetir» y «cambiar la serie» solo afectan de hoy en adelante.
 

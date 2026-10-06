@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Privacidad y términos · Mi horario</title>
+  <style>
+    :root { --bg: #F2F3F0; --surface: #fff; --ink: #1B1F1D; --muted: #636a66; --line: #E2E4DF; --accent: #3F6B5A; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #121413; --surface: #1A1D1B; --ink: #ECEFEC; --muted: #9aa19d; --line: #272B29; --accent: #8DBFA9; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+    a { color: var(--accent); }
+    h1 { font-size: 26px; margin: 8px 0 4px; letter-spacing: -0.01em; }
+    h2 { font-size: 20px; margin: 40px 0 8px; scroll-margin-top: 16px; }
+    h3 { font-size: 16px; margin: 24px 0 4px; }
+    p, li { color: var(--ink); }
+    li { margin: 4px 0; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 4px 20px 20px; margin-top: 16px; }
+    nav { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0 0; }
+  </style>
+</head>
+<body>
+<main>
+  <p><a href="./">← Volver a Mi horario</a></p>
+  <h1>Privacidad y términos</h1>
+  <p class="muted">Última actualización: octubre de 2026. Este texto es una explicación sencilla de cómo funciona la app; no es asesoramiento jurídico.</p>
+  <nav><a href="#privacidad">Política de privacidad</a><a href="#terminos">Términos de uso</a></nav>
+
+  <!--
+    ANTES DE PUBLICAR LA APP EN UNA TIENDA: añade aquí tu correo de contacto como responsable, por ejemplo:
+    <p><b>Responsable y contacto:</b> tu nombre · tucorreo@ejemplo.com</p>
+  -->
+
+  <section class="card" id="privacidad">
+    <h2>Política de privacidad</h2>
+
+    <h3>1. Qué datos se guardan</h3>
+    <ul>
+      <li><b>Tu cuenta:</b> el correo electrónico y la contraseña con los que te registras. La contraseña la gestiona Firebase Authentication (Google) y nadie, ni quien hace la app, puede verla.</li>
+      <li><b>Tu horario:</b> tus actividades (título, horas, categoría, notas y subtareas), las plantillas y repeticiones que crees, tus días de descanso, tus ajustes de racha, tus insignias y los nombres y colores que elijas para las categorías. Se guardan en Cloud Firestore, bajo tu cuenta.</li>
+      <li><b>En este dispositivo:</b> una copia de tu horario para poder usar la app sin conexión, y ajustes propios del dispositivo (tema, color, avisos).</li>
+    </ul>
+
+    <h3>2. Para qué se usan</h3>
+    <p>Solo para que la app funcione: mostrar tu horario, sincronizarlo entre tus dispositivos y avisarte de tus actividades. No hay publicidad, no se venden ni se ceden tus datos y no se elaboran perfiles.</p>
+
+    <h3>3. Estadísticas de uso (opcional)</h3>
+    <p>Si lo activas en Ajustes, la app envía a Google Analytics eventos genéricos y anónimos (por ejemplo, «se abrió la pantalla de estadísticas»). Nunca se envían títulos, notas ni el contenido de tu horario. Está desactivado hasta que lo aceptes y puedes cambiarlo cuando quieras.</p>
+
+    <h3>4. Con quién se comparten</h3>
+    <p>Los datos se almacenan con Google (Firebase), que actúa como proveedor de infraestructura. Sus servidores pueden estar en distintos países y Google aplica sus propias garantías de seguridad y transferencia internacional. No se comparten con nadie más.</p>
+
+    <h3>5. Seguridad</h3>
+    <p>La comunicación va cifrada (HTTPS) y las reglas de la base de datos solo permiten que cada persona lea y escriba sus propios datos.</p>
+
+    <h3>6. Cuánto tiempo se conservan</h3>
+    <p>Mientras tengas la cuenta. Cuando la eliminas, se borran tu cuenta y todos tus datos de la nube y se vacía el dispositivo. Las copias de seguridad internas del proveedor pueden conservarlos un tiempo limitado hasta que se purgan.</p>
+
+    <h3>7. Tus derechos</h3>
+    <ul>
+      <li><b>Acceder y llevarte tus datos:</b> Ajustes → Copia de seguridad → Exportar.</li>
+      <li><b>Corregir:</b> editando tus actividades y ajustes.</li>
+      <li><b>Eliminar:</b> Ajustes → Cuenta → Eliminar cuenta. Es inmediato y no se puede deshacer.</li>
+      <li><b>Retirar el consentimiento de estadísticas:</b> Ajustes → Estadísticas de uso.</li>
+    </ul>
+    <p>Si crees que tus datos no se tratan correctamente, puedes reclamar ante la autoridad de protección de datos de tu país (en España, la Agencia Española de Protección de Datos, <a href="https://www.aepd.es" target="_blank" rel="noopener">aepd.es</a>).</p>
+
+    <h3>8. Menores</h3>
+    <p>La app no está pensada para menores de 14 años. Si tienes menos de esa edad, necesitas el permiso de tu madre, padre o tutor para crear una cuenta.</p>
+
+    <h3>9. Cambios</h3>
+    <p>Si este texto cambia de forma importante, se actualizará la fecha de arriba.</p>
+  </section>
+
+  <section class="card" id="terminos">
+    <h2>Términos de uso</h2>
+
+    <h3>1. Qué es Mi horario</h3>
+    <p>Una aplicación para planificar tu día, marcar lo que haces y llevar una racha. Es de uso personal y gratuito.</p>
+
+    <h3>2. Tu cuenta</h3>
+    <p>Eres responsable de guardar tu contraseña y de lo que ocurra con tu cuenta. Puedes eliminarla en cualquier momento desde Ajustes.</p>
+
+    <h3>3. Tu contenido</h3>
+    <p>Lo que escribes es tuyo. Solo se usa para mostrártelo a ti, como se explica en la política de privacidad. No guardes en la app información que no quieras tener en la nube, como contraseñas o datos bancarios.</p>
+
+    <h3>4. Uso correcto</h3>
+    <p>No uses la app para nada ilegal, ni intentes acceder a datos de otras personas, dañar el servicio o saltarte sus protecciones.</p>
+
+    <h3>5. Sin garantías</h3>
+    <p>La app se ofrece «tal cual», sin garantía de que funcione siempre o sin errores. Los avisos dependen del sistema de tu dispositivo y pueden retrasarse o no llegar. No uses la app como único recordatorio de cosas importantes (medicación, citas médicas, vuelos…). Haz copias de seguridad de lo que te importe con la opción Exportar.</p>
+
+    <h3>6. Cambios y fin del servicio</h3>
+    <p>La app puede cambiar, y el servicio puede suspenderse o terminar. Si ocurre, intentaremos avisar con tiempo para que puedas exportar tus datos.</p>
+
+    <h3>7. Ley aplicable</h3>
+    <p>Estos términos se rigen por la legislación española.</p>
+  </section>
+
+  <p class="muted" style="margin-top:24px"><a href="./">← Volver a Mi horario</a></p>
+</main>
+</body>
+</html>

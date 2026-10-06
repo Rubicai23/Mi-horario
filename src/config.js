@@ -24,8 +24,13 @@ export const LIMITS = Object.freeze({
   subtasks: 15,
   subtaskLength: 60,
   restDays: 400,                        // debe coincidir con firestore.rules
-  badges: 40                            // debe coincidir con firestore.rules
+  badges: 40,                           // debe coincidir con firestore.rules
+  categories: 6,                        // debe coincidir con firestore.rules (un ajuste por categoría)
+  categoryLabel: 20
 });
+
+/** Meses que se pueden recorrer en las estadísticas (hacia atrás y hacia delante desde el actual). */
+export const MONTH_RANGE = Object.freeze({ back: 24, forward: 12 });
 
 /** Minutos de antelación que se pueden elegir para los avisos (0 = al empezar). */
 export const LEAD_OPTIONS = Object.freeze([0, 5, 10, 15, 30]);
@@ -73,6 +78,23 @@ export const BACKUP = Object.freeze({ app: 'mi-horario', version: 1 });
 /* ───────── Calendario ───────── */
 export const DAY_NAMES = Object.freeze(['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']);
 export const DAY_LETTERS = Object.freeze(['D', 'L', 'M', 'X', 'J', 'V', 'S']);
+
+/* ───────── Aspecto (solo de este dispositivo) ───────── */
+export const THEMES = Object.freeze([
+  { key: 'auto', label: 'Automático' },
+  { key: 'light', label: 'Claro' },
+  { key: 'dark', label: 'Oscuro' }
+]);
+/** Colores de acento. El color de cada uno está definido en style.css (data-accent). */
+export const ACCENTS = Object.freeze([
+  { key: 'verde', label: 'Verde', swatch: '#3F6B5A' },
+  { key: 'azul', label: 'Azul', swatch: '#3F6A9B' },
+  { key: 'violeta', label: 'Violeta', swatch: '#6D5A9E' },
+  { key: 'ambar', label: 'Ámbar', swatch: '#A9742A' },
+  { key: 'rosa', label: 'Rosa', swatch: '#A9577A' },
+  { key: 'grafito', label: 'Grafito', swatch: '#4B5350' }
+]);
+export const DEFAULT_ACCENT = 'verde';
 
 /* ───────── Categorías ───────── */
 export const CATEGORIES = Object.freeze([
@@ -151,6 +173,15 @@ export const PRESETS = Object.freeze([
   Object.freeze({ id: 'focus', quick: true, icon: 'book', label: 'Jornada de estudio/trabajo', title: 'Añadir jornada de estudio/trabajo', rows: () => FOCUS_DAY }),
   Object.freeze({ id: 'sample-dam', quick: false, icon: 'cap', label: 'Horario DAM de ejemplo', title: 'Usar el horario DAM de ejemplo', rows: dow => SAMPLE_WEEK[dow] })
 ]);
+
+/** Colores que se pueden elegir para una categoría (se guarda solo el nombre, nunca un color libre). */
+export const DEFAULT_CATEGORY_COLOR = Object.freeze({
+  clase: 'pizarra', gym: 'cobre', estudio: 'violeta', ingles: 'turquesa', libre: 'menta', rutina: 'gris'
+});
+export const CATEGORY_COLORS = Object.freeze({
+  pizarra: '#5B7C99', cobre: '#B5835A', violeta: '#7C6BA6', menta: '#6FA287', gris: '#A3A9A5', turquesa: '#4E8F9E',
+  rojo: '#C0645C', rosa: '#C77B9B', mostaza: '#C9A23F', azul: '#4F7FD1', verde: '#5E9B4F', naranja: '#D9803F'
+});
 
 /* ───────── Firebase (clave pública del cliente: la protección real son firestore.rules) ───────── */
 export const FIREBASE_CONFIG = Object.freeze({
