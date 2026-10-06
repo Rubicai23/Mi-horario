@@ -248,7 +248,7 @@ button { font-family: inherit; }
   position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 60;
   transform: translate(-50%, 140%); opacity: 0; transition: transform .3s cubic-bezier(.2, .8, .2, 1), opacity .3s;
   background: var(--ink); color: var(--bg); border-radius: 14px; padding: 12px 16px;
-  display: flex; align-items: center; gap: 16px; font-size: 14px; line-height: 1.4; max-width: calc(100% - 32px);
+  display: flex; align-items: center; gap: 16px; font-size: 14px; line-height: 1.4; width: max-content; max-width: calc(100vw - 32px);
   box-shadow: 0 8px 24px rgba(0, 0, 0, .2); pointer-events: none;
 }
 .toast.show { transform: translate(-50%, 0); opacity: 1; pointer-events: auto; }
@@ -397,3 +397,30 @@ button { font-family: inherit; }
   .row.cur .pt i { animation: none; }
   .bar > i, .streak-bar > i, .sheet, .ov, .row, .toast, .track i { transition: none; }
 }
+
+/* Tanda 3: descanso, insignias y ajustes de racha */
+.wk-restday .wk-dot { border-color: var(--line); background: var(--bg); color: var(--muted); }
+.wk-restday .wk-dot svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 1.8; fill: none; }
+.wk-off { opacity: .45; }
+.wk-off .wk-dot { border-style: dotted; }
+.streak-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.streak-foot .streak-best { margin: 0; }
+.streak-foot .link { padding: 8px 0 8px 12px; }
+.set-block { padding: 16px 0; border-bottom: 1px solid var(--line); }
+.set-block .chips { margin: 12px 0 0; }
+.badge-grid { list-style: none; margin: 0 0 16px; padding: 0; display: grid; gap: 10px; }
+.badge { display: flex; gap: 14px; align-items: flex-start; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; background: var(--bg); opacity: .62; }
+.badge.got { opacity: 1; border-color: var(--accent); background: var(--accent-soft); }
+.badge-ic { flex: none; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--line); color: var(--muted); }
+.badge.got .badge-ic { background: var(--accent); color: var(--surface); }
+.badge-ic svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.8; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.badge-tx { display: block; min-width: 0; flex: 1; }
+.badge-tx b { display: block; font-size: 15px; font-weight: 600; }
+.badge-tx small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); line-height: 1.4; }
+.badge-tx em { display: block; margin-top: 6px; font-size: 12px; font-style: normal; font-variant-numeric: tabular-nums; }
+.badge .track { display: block; height: 4px; margin-top: 6px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.badge .track i { display: block; height: 100%; background: var(--accent); }
+.streak-foot .link { margin-top: 0; }
+.menu-item:disabled { opacity: .5; cursor: default; }
+.badge .track { position: relative; }
+.badge .track i { background: var(--accent); }

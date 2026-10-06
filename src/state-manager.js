@@ -11,7 +11,7 @@
  * Los días son inmutables (arrays congelados): cada cambio crea un array nuevo.
  */
 import {
-  BACKUP, CATEGORIES, LEAD_OPTIONS, LIMITS, MAX_MIN, PRESETS, STORAGE, STREAK_RULES
+  BACKUP, BADGES, CATEGORIES, LEAD_OPTIONS, LIMITS, MAX_MIN, PRESETS, STORAGE, STREAK_RULES
 } from './config.js';
 import {
   addDays, diffDays, fromHHMM, isDateKey, parseDateKey, startOfDay, toDateKey, toHHMM, uid, weekDates
@@ -137,8 +137,32 @@ export function sanitizeProfile(raw) {
     .map(sanitizeRule)
     .filter(rule => rule && !seenRules.has(rule.id) && seenRules.add(rule.id))
     .slice(0, LIMITS.recurring);
-  return { templates, recurring };
+  const profile = { templates, recurring };
+  const rest = Array.from(new Set((Array.isArray(raw.rest) ? raw.rest : []).filter(isDateKey))).sort().slice(-LIMITS.restDays);
+  if (rest.length) profile.rest = rest;
+  const streak = normalizeStreakConfig(raw.streak);
+  if (!isDefaultStreak(streak)) profile.streak = streak;
+  const badgeSource = raw.badges && typeof raw.badges === 'object' && !Array.isArray(raw.badges) ? raw.badges : {};
+  const badges = Object.fromEntries(Object.entries(badgeSource)
+    .filter(([id, date]) => BADGE_IDS.has(id) && isDateKey(date))
+    .sort(([a], [b]) => (a < b ? -1 : 1))
+    .slice(0, LIMITS.badges));
+  if (Object.keys(badges).length) profile.badges = badges;
+  return profile;
 }
+
+/** ¿Tiene el perfil algo que guardar o sincronizar? */
+export const profileHasData = profile => Boolean(profile && (
+  profile.templates.length || profile.recurring.length || (profile.rest && profile.rest.length)
+  || profile.streak || (profile.badges && Object.keys(profile.badges).length)
+));
+
+/** Une dos mapas de insignias: se queda la fecha más antigua de cada una. */
+const unionBadges = (a = {}, b = {}) => {
+  const out = { ...a };
+  Object.entries(b).forEach(([id, date]) => { if (!out[id] || date < out[id]) out[id] = date; });
+  return out;
+};
 
 const mergeById = (current, incoming, max) => {
   const byId = new Map(current.map(item => [item.id, item]));
@@ -165,33 +189,56 @@ const freezeBlock = block => {
 };
 const freezeDay = blocks => Object.freeze(blocks.map(freezeBlock));
 
+/* ═══════════════ Ajustes de racha ═══════════════ */
+
+const ALL_DOWS = Object.freeze([0, 1, 2, 3, 4, 5, 6]);
+const NO_REST = Object.freeze(new Set());
+export const DEFAULT_STREAK = Object.freeze({ goal: STREAK_RULES.defaultGoal, days: ALL_DOWS });
+
+/** Meta (%) y días de la semana que cuentan para la racha. Cualquier valor raro vuelve al valor por defecto. */
+export function normalizeStreakConfig(raw) {
+  const object = raw && typeof raw === 'object' ? raw : {};
+  const goal = STREAK_RULES.goalOptions.includes(Number(object.goal)) ? Number(object.goal) : STREAK_RULES.defaultGoal;
+  const days = Array.isArray(object.days)
+    ? Array.from(new Set(object.days.map(Number).filter(n => Number.isInteger(n) && n >= 0 && n <= 6))).sort((a, b) => a - b)
+    : [];
+  return { goal, days: days.length ? days : ALL_DOWS.slice() };
+}
+export const isDefaultStreak = config => config.goal === STREAK_RULES.defaultGoal && config.days.length === 7;
+
 /* ═══════════════ Progreso y rachas ═══════════════ */
 
-/** Actividades que hay que completar para cumplir el objetivo del día (80 %, redondeo hacia arriba). */
-export const requiredCount = total => Math.ceil((total * STREAK_RULES.goalNum) / STREAK_RULES.goalDen);
+/** Actividades que hay que completar para cumplir la meta del día (redondeo hacia arriba). */
+export const requiredFor = (total, goal) => Math.ceil((total * goal) / 100);
+export const requiredCount = total => requiredFor(total, STREAK_RULES.defaultGoal);
 
-export function dayProgress(blocks) {
+export function dayProgress(blocks, goal = STREAK_RULES.defaultGoal) {
   const total = blocks.length;
   const done = blocks.reduce((n, b) => n + (b.d ? 1 : 0), 0);
-  const required = requiredCount(total);
+  const required = requiredFor(total, goal);
   return {
     total,
     done,
     required,
     remaining: Math.max(0, required - done),
-    // Comparación entera (sin decimales): done/total >= goalNum/goalDen
-    met: total > 0 && done * STREAK_RULES.goalDen >= total * STREAK_RULES.goalNum
+    // Comparación entera (sin decimales): done/total >= goal/100
+    met: total > 0 && done * 100 >= total * goal
   };
 }
 
+/** ¿Cuenta este día para la racha? No cuentan los días de descanso ni los días de la semana desactivados. */
+const countsForStreak = (key, dow, config, rest) => !rest.has(key) && config.days.includes(dow);
+
 /**
- * Racha actual y mejor racha: días consecutivos en los que se cumplió el objetivo.
+ * Racha actual y mejor racha: días consecutivos en los que se cumplió la meta.
  *  - El día de hoy aún en curso no rompe la racha (suma cuando se cumple).
- *  - Un día pasado con actividades por debajo del objetivo la rompe.
+ *  - Un día pasado con actividades por debajo de la meta la rompe.
  *  - Los días sin actividades no suman ni rompen, hasta `maxRestGap` seguidos (fin de semana libre).
  *    Un hueco mayor la rompe: evita conservar una racha abandonando la app.
+ *  - Los días de descanso y los días de la semana que no cuentan se saltan por completo: ni suman, ni rompen,
+ *    ni cuentan como hueco.
  */
-export function computeStreaks({ blocksAt, today, earliestKey }) {
+export function computeStreaks({ blocksAt, today, earliestKey, config = DEFAULT_STREAK, rest = NO_REST }) {
   const first = earliestKey ? parseDateKey(earliestKey) : null;
   if (!first) return { current: 0, best: 0 };
   const span = Math.min(Math.max(diffDays(first, today), 0), STREAK_RULES.maxLookbackDays);
@@ -200,7 +247,10 @@ export function computeStreaks({ blocksAt, today, earliestKey }) {
   let gap = 0;
   for (let offset = span; offset >= 0; offset--) {
     const isToday = offset === 0;
-    const progress = dayProgress(blocksAt(toDateKey(addDays(today, -offset))));
+    const date = addDays(today, -offset);
+    const key = toDateKey(date);
+    if (!countsForStreak(key, date.getDay(), config, rest)) continue;
+    const progress = dayProgress(blocksAt(key), config.goal);
     if (progress.total === 0) {
       gap += isToday ? 0 : 1;
       if (gap > STREAK_RULES.maxRestGap) run = 0;
@@ -218,19 +268,64 @@ export function computeStreaks({ blocksAt, today, earliestKey }) {
 }
 
 /** Estado de cada día de la semana actual (lunes → domingo) para dibujar la racha. */
-export function weekStrip({ blocksAt, today }) {
+export function weekStrip({ blocksAt, today, config = DEFAULT_STREAK, rest = NO_REST }) {
   const todayKey = toDateKey(today);
   return weekDates(today).map(date => {
     const key = toDateKey(date);
-    const progress = dayProgress(blocksAt(key));
+    const progress = dayProgress(blocksAt(key), config.goal);
     let status;
-    if (key > todayKey) status = 'future';
+    if (rest.has(key)) status = 'restday';
+    else if (!config.days.includes(date.getDay())) status = 'off';
+    else if (key > todayKey) status = 'future';
     else if (progress.total === 0) status = 'rest';
     else if (progress.met) status = 'met';
     else status = key === todayKey ? 'pending' : 'missed';
     return { key, dow: date.getDay(), status, isToday: key === todayKey, done: progress.done, total: progress.total };
   });
 }
+
+/* ═══════════════ Insignias ═══════════════ */
+
+const BADGE_IDS = new Set(BADGES.map(b => b.id));
+const badgeValueOf = (badge, stats) => ({ done: stats.done, streak: stats.best, days: stats.daysMet, week: stats.perfectWeeks })[badge.kind] || 0;
+
+/** Cifras del historial con las que se consiguen las insignias. `keys` = días con registro propio. */
+export function badgeStats({ blocksAt, keys, today, config = DEFAULT_STREAK, rest = NO_REST }) {
+  let done = 0;
+  let daysMet = 0;
+  const weeks = new Set();
+  keys.forEach(key => {
+    const blocks = blocksAt(key);
+    done += blocks.reduce((n, b) => n + (b.d ? 1 : 0), 0);
+    const date = parseDateKey(key);
+    if (countsForStreak(key, date.getDay(), config, rest) && dayProgress(blocks, config.goal).met) daysMet += 1;
+    weeks.add(toDateKey(weekDates(date)[0]));
+  });
+  const todayKey = toDateKey(today);
+  let perfectWeeks = 0;
+  weeks.forEach(mondayKey => {
+    const dates = weekDates(parseDateKey(mondayKey));
+    if (toDateKey(dates[6]) >= todayKey) return; // solo semanas ya terminadas
+    let withActivities = 0;
+    let allMet = true;
+    dates.forEach(date => {
+      const key = toDateKey(date);
+      if (!countsForStreak(key, date.getDay(), config, rest)) return;
+      const blocks = blocksAt(key);
+      if (!blocks.length) return;
+      withActivities += 1;
+      if (!dayProgress(blocks, config.goal).met) allMet = false;
+    });
+    if (allMet && withActivities >= 3) perfectWeeks += 1;
+  });
+  const earliest = keys.length ? keys.slice().sort()[0] : null;
+  const { best } = computeStreaks({ blocksAt, today, earliestKey: earliest, config, rest });
+  return { done, daysMet, perfectWeeks, best };
+}
+
+/** Insignias cuyo requisito cumplen las cifras (con su valor actual). */
+export const earnedBadges = stats => BADGES.filter(b => badgeValueOf(b, stats) >= b.target);
+export const badgeProgress = (badge, stats) => Math.min(badgeValueOf(badge, stats), badge.target);
 
 /* ═══════════════ Consultas puras sobre un día ═══════════════ */
 
@@ -370,7 +465,7 @@ export function parseBackup(text) {
       settings.push([storageKey, value]);
     }
   });
-  const hasProfile = Boolean(profile && (profile.templates.length || profile.recurring.length));
+  const hasProfile = profileHasData(profile);
   if (!days.length && !settings.length && !hasProfile) throw new Error('La copia no contiene datos válidos.');
   return { days, settings, profile: hasProfile ? profile : null };
 }
@@ -506,16 +601,22 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     if (copy.k) copy.k = Object.freeze(copy.k.map(item => Object.freeze({ ...item })));
     return Object.freeze(copy);
   };
-  const freezeProfile = value => Object.freeze({
-    templates: Object.freeze(value.templates.map(t => Object.freeze({
-      id: t.id, name: t.name, blocks: Object.freeze(t.blocks.map(freezeStructure))
-    }))),
-    recurring: Object.freeze(value.recurring.map(rule => {
-      const copy = { ...rule, dows: Object.freeze(rule.dows.slice()) };
-      if (copy.k) copy.k = Object.freeze(copy.k.map(item => Object.freeze({ ...item })));
-      return Object.freeze(copy);
-    }))
-  });
+  const freezeProfile = value => {
+    const out = {
+      templates: Object.freeze(value.templates.map(t => Object.freeze({
+        id: t.id, name: t.name, blocks: Object.freeze(t.blocks.map(freezeStructure))
+      }))),
+      recurring: Object.freeze(value.recurring.map(rule => {
+        const copy = { ...rule, dows: Object.freeze(rule.dows.slice()) };
+        if (copy.k) copy.k = Object.freeze(copy.k.map(item => Object.freeze({ ...item })));
+        return Object.freeze(copy);
+      }))
+    };
+    if (value.rest && value.rest.length) out.rest = Object.freeze(value.rest.slice());
+    if (value.streak) out.streak = Object.freeze({ goal: value.streak.goal, days: Object.freeze(value.streak.days.slice()) });
+    if (value.badges && Object.keys(value.badges).length) out.badges = Object.freeze({ ...value.badges });
+    return Object.freeze(out);
+  };
   let profile = null;
   let profileVersion = 0;
   const loadProfile = () => {
@@ -548,6 +649,8 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     emit({ type: 'profile', origin });
   };
   const isProfileDirty = () => storage.read(STORAGE.profileDirty) === '1';
+  const streakConfig = () => normalizeStreakConfig(loadProfile().streak);
+  const restSet = () => new Set(loadProfile().rest || []);
 
   /* ── Escritura ── */
   const commit = (key, blocks, origin = 'local') => {
@@ -661,7 +764,8 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       if (!target) return { ok: false };
       const next = current.map(b => (b.id === id ? { ...b, d: !b.d } : b));
       commit(key, next);
-      return { ok: true, done: !target.d, before: dayProgress(current), after: dayProgress(next) };
+      const { goal } = streakConfig();
+      return { ok: true, done: !target.d, before: dayProgress(current, goal), after: dayProgress(next, goal) };
     },
 
     reorder(key, orderedIds) {
@@ -955,13 +1059,69 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
     streakView(now = clock()) {
       const blocksAt = load;
       const keys = storedKeys().sort();
-      const { current, best } = computeStreaks({ blocksAt, today: now, earliestKey: keys[0] || null });
+      const config = streakConfig();
+      const rest = restSet();
+      const { current, best } = computeStreaks({ blocksAt, today: now, earliestKey: keys[0] || null, config, rest });
+      const key = toDateKey(now);
       return {
         current,
         best,
-        week: weekStrip({ blocksAt, today: now }),
-        today: dayProgress(load(toDateKey(now)))
+        goal: config.goal,
+        week: weekStrip({ blocksAt, today: now, config, rest }),
+        today: dayProgress(load(key), config.goal),
+        restToday: rest.has(key),
+        countsToday: config.days.includes(now.getDay())
       };
+    },
+
+    /* Ajustes de racha (se sincronizan con el perfil) */
+    getStreakConfig: () => streakConfig(),
+    setStreakConfig(raw) {
+      const next = normalizeStreakConfig(raw);
+      const before = streakConfig();
+      if (next.goal === before.goal && next.days.join() === before.days.join()) return { ok: true, changed: false };
+      const profile0 = { ...loadProfile() };
+      if (isDefaultStreak(next)) delete profile0.streak;
+      else profile0.streak = next;
+      commitProfile(profile0);
+      return { ok: true, changed: true, config: next };
+    },
+
+    /* Días de descanso: no suman ni rompen la racha. Solo hoy y días futuros (el pasado no se reescribe). */
+    listRestDays: () => loadProfile().rest || [],
+    isRestDay: key => (loadProfile().rest || []).includes(key),
+    setRestDay(key, on) {
+      assertDateKey(key);
+      if (key < todayKey()) return { ok: false, error: 'Solo puedes cambiar hoy o días que aún no han llegado.' };
+      if (key > toDateKey(addDays(clock(), 365))) return { ok: false, error: 'Ese día queda demasiado lejos.' };
+      const current = loadProfile().rest || [];
+      if (current.includes(key) === Boolean(on)) return { ok: true, changed: false };
+      const cutoff = toDateKey(addDays(clock(), -STREAK_RULES.maxLookbackDays));
+      const list = on ? [...current.filter(k => k >= cutoff), key].sort() : current.filter(k => k !== key);
+      if (list.length > LIMITS.restDays) return { ok: false, error: 'Tienes demasiados días de descanso marcados.' };
+      const profile0 = { ...loadProfile() };
+      if (list.length) profile0.rest = list;
+      else delete profile0.rest;
+      commitProfile(profile0);
+      return { ok: true, changed: true, undo: () => api.setRestDay(key, !on) };
+    },
+
+    /* Insignias: se calculan con el historial; al lograrlas se guardan con su fecha */
+    checkBadges(now = clock()) {
+      const stats = badgeStats({ blocksAt: load, keys: storedKeys().sort(), today: now, config: streakConfig(), rest: restSet() });
+      const have = loadProfile().badges || {};
+      const fresh = earnedBadges(stats).filter(b => !have[b.id]);
+      if (!fresh.length) return [];
+      const date = toDateKey(now);
+      const badges = { ...have };
+      fresh.forEach(b => { badges[b.id] = date; });
+      commitProfile({ ...loadProfile(), badges });
+      return fresh;
+    },
+    listBadges(now = clock()) {
+      const stats = badgeStats({ blocksAt: load, keys: storedKeys().sort(), today: now, config: streakConfig(), rest: restSet() });
+      const have = loadProfile().badges || {};
+      return BADGES.map(b => ({ ...b, earnedOn: have[b.id] || null, value: badgeProgress(b, stats) }));
     },
     weekSummary(now = clock()) {
       return summarizeWeek(weekDates(now).map(d => load(toDateKey(d))));
@@ -1017,17 +1177,31 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
         remote[field] != null && (!Array.isArray(remote[field]) || (remote[field].length > 0 && !clean[field].length))
       ));
       if (corrupt) return false;
-      if (JSON.stringify(clean) === JSON.stringify(loadProfile())) return false;
-      setProfile(clean);
+      // Campos opcionales que el documento remoto no trae (lo escribió una versión anterior): se conserva lo local.
+      // Las insignias solo se ganan: se unen con las locales.
+      const local = loadProfile();
+      const merged = sanitizeProfile({
+        ...clean,
+        rest: remote.rest == null ? local.rest : clean.rest,
+        streak: remote.streak == null ? local.streak : clean.streak,
+        badges: unionBadges(local.badges, clean.badges)
+      });
+      const extraBadges = Object.keys(merged.badges || {}).length > Object.keys(clean.badges || {}).length;
+      if (JSON.stringify(merged) === JSON.stringify(local)) {
+        if (extraBadges) sendProfile();
+        return false;
+      }
+      setProfile(merged);
       storage.write(STORAGE.profile, JSON.stringify(profile));
       emit({ type: 'profile', origin: 'remote' });
+      if (extraBadges) sendProfile();
       return true;
     },
 
     /** Primera lectura completa del perfil: sube lo pendiente o lo que solo existe en este dispositivo. */
     reconcileProfile(remoteExists) {
       const local = loadProfile();
-      if (isProfileDirty() || (!remoteExists && (local.templates.length || local.recurring.length))) sendProfile();
+      if (isProfileDirty() || (!remoteExists && profileHasData(local))) sendProfile();
     },
 
     /* Sesión: a qué cuenta pertenecen los datos locales */
@@ -1061,8 +1235,7 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       const data = {};
       storedKeys().forEach(key => { data[dayStorageKey(key)] = storage.read(dayStorageKey(key)); });
       BACKUP_SETTING_KEYS.forEach(k => { const v = storage.read(k); if (v !== null) data[k] = v; });
-      const { templates, recurring } = loadProfile();
-      if (templates.length || recurring.length) data[STORAGE.profile] = JSON.stringify(loadProfile());
+      if (profileHasData(loadProfile())) data[STORAGE.profile] = JSON.stringify(loadProfile());
       return { app: BACKUP.app, version: BACKUP.version, exportedAt: new Date().toISOString(), data };
     },
 
@@ -1077,10 +1250,13 @@ export function createStateManager({ storage, sync = NO_SYNC, clock = () => new 
       settings.forEach(([k, v]) => storage.write(k, v));
       if (imported) {
         const current = loadProfile();
-        commitProfile({
+        commitProfile(sanitizeProfile({
           templates: mergeTemplates(current.templates, imported.templates),
-          recurring: mergeRules(current.recurring, imported.recurring)
-        }, 'import');
+          recurring: mergeRules(current.recurring, imported.recurring),
+          rest: Array.from(new Set([...(current.rest || []), ...(imported.rest || [])])),
+          streak: current.streak || imported.streak,
+          badges: unionBadges(current.badges, imported.badges)
+        }), 'import');
       }
       emit({ type: 'days', keys: days.map(([key]) => key), origin: 'import' });
       return { days: days.length, templates: imported ? imported.templates.length : 0, recurring: imported ? imported.recurring.length : 0 };

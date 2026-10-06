@@ -5,7 +5,7 @@
  * No contiene reglas de negocio (state-manager.js), ni acceso a Firebase (firebase-service.js),
  * ni HTML (ui-components.js), ni detalles web/nativos (platform.js).
  */
-import { FIREBASE_CONFIG, LEAD_OPTIONS, LIMITS, NOTIFICATIONS, WEEK_RANGE } from './config.js';
+import { FIREBASE_CONFIG, LEAD_OPTIONS, LIMITS, NOTIFICATIONS, STREAK_RULES, WEEK_RANGE } from './config.js';
 import {
   createBrowserStorage, createStartWatcher, createStateManager, describeDay, findOverlaps, parseBackup
 } from './state-manager.js';
@@ -55,6 +55,7 @@ function createContext() {
     copySheet: sheets.register($('sheetCopy')),
     templatesSheet: sheets.register($('sheetTemplates')),
     repeatsSheet: sheets.register($('sheetRepeats')),
+    badgesSheet: sheets.register($('sheetBadges')),
     view: { selectedDow: clock().getDay(), weekOffset: 0, sorting: false, dateKey: toDateKey(clock()), minuteKey: '', stale: false },
     account: { status: 'loading', email: '', uid: '' },
     analytics: 'off',       // off | on | unsupported
@@ -175,15 +176,27 @@ function applyPreset(ctx, presetId) {
   });
 }
 
+function openBadges(ctx) {
+  $('badgeList').innerHTML = ui.badgesMarkup(ctx.state.listBadges(ctx.clock()));
+  ctx.badgesSheet.open();
+}
+
 function toggleDone(ctx, key, id) {
   const result = ctx.state.toggleDone(key, id);
   if (!result.ok) return;
+  const fresh = result.done ? ctx.state.checkBadges(ctx.clock()) : [];
+  if (fresh.length) ctx.cloud.track('badge_earned', { count: fresh.length });
+  const badgeText = fresh.length === 1 ? ` Insignia nueva: ${fresh[0].title}.` : fresh.length ? ` ${fresh.length} insignias nuevas.` : '';
+  const seeBadges = fresh.length ? { label: 'Ver', onAction: () => openBadges(ctx) } : {};
   const reachedGoal = result.done && !result.before.met && result.after.met;
   if (reachedGoal && key === toDateKey(ctx.clock())) {
     const { current } = ctx.state.streakView();
     vibrate(30);
     ctx.cloud.track('daily_goal_met', { streak: current });
-    ctx.toast.show(`¡Objetivo de hoy cumplido! Racha: ${plural(current, 'día', 'días')}`, { duration: 6000 });
+    ctx.toast.show(`¡Objetivo de hoy cumplido! Racha: ${plural(current, 'día', 'días')}.${badgeText}`, { duration: 6000, ...seeBadges });
+  } else if (fresh.length) {
+    vibrate(30);
+    ctx.toast.show(`¡Insignia conseguida!${badgeText.replace(' Insignia nueva:', '')}`, { duration: 6000, ...seeBadges });
   } else if (result.done) {
     ctx.cloud.track('activity_done');
   }
@@ -483,15 +496,38 @@ function openCopy(ctx) {
   ctx.copySheet.open();
 }
 
+function refreshRestButton(ctx) {
+  const key = selectedKey(ctx);
+  const isRest = ctx.state.isRestDay(key);
+  const past = key < toDateKey(ctx.clock());
+  $('menuRestT').textContent = isRest ? 'Quitar día de descanso' : 'Marcar como día de descanso';
+  $('menuRestS').textContent = past
+    ? 'Solo se puede en hoy y en días que aún no han llegado.'
+    : isRest ? 'Volverá a contar para tu racha.' : 'No suma ni rompe tu racha.';
+  $('menuRest').disabled = past;
+}
+
 function setupDayMenu(ctx) {
   const { state, toast } = ctx;
 
   $('moreBtn').addEventListener('click', () => {
     const date = dateForDow(ctx.view.selectedDow, anchorOf(ctx, ctx.clock()));
     $('dayLabel').textContent = formatLongDate(date);
+    refreshRestButton(ctx);
     ctx.daySheet.open();
   });
   $('closeDay').addEventListener('click', ctx.daySheet.close);
+  $('menuRest').addEventListener('click', () => {
+    const key = selectedKey(ctx);
+    const on = !state.isRestDay(key);
+    const result = state.setRestDay(key, on);
+    if (!result.ok) { toast.show(result.error); return; }
+    ctx.cloud.track(on ? 'rest_day_set' : 'rest_day_removed');
+    ctx.daySheet.close();
+    toast.show(on ? 'Día de descanso marcado. No suma ni rompe tu racha.' : 'Este día vuelve a contar para tu racha.', {
+      label: 'Deshacer', duration: 7000, onAction: () => result.undo()
+    });
+  });
   $('menuCopy').addEventListener('click', () => openCopy(ctx));
   $('menuTemplates').addEventListener('click', () => openTemplates(ctx));
   $('menuRepeats').addEventListener('click', () => { refreshRepeats(ctx); ctx.repeatsSheet.open(); });
@@ -663,6 +699,14 @@ function setupSettings(ctx) {
       ? 'Te aviso justo cuando empieza cada actividad.'
       : `Te aviso ${lead} min antes de que empiece cada actividad.`;
 
+    const streak = state.getStreakConfig();
+    $('goalSelect').value = String(streak.goal);
+    $('goalStatus').textContent = `Completa el ${streak.goal} % de las actividades de un día para sumar a tu racha.`;
+    $('streakDays').innerHTML = ui.weekdayChipsMarkup({ selected: new Set(streak.days), locked: -1 });
+    $('streakDaysStatus').textContent = streak.days.length === 7
+      ? 'Todos los días cuentan.'
+      : 'Los demás días no suman ni rompen tu racha.';
+
     const a = describeAnalytics(ctx);
     $('analyticsSwitch').setAttribute('aria-checked', a.on);
     $('analyticsSwitch').disabled = a.disabled;
@@ -690,6 +734,27 @@ function setupSettings(ctx) {
     else await notifier.enable();
     refreshSettings();
     ctx.syncNative();
+  });
+
+  $('goalSelect').innerHTML = STREAK_RULES.goalOptions.map(v => `<option value="${v}">${v} %</option>`).join('');
+  $('goalSelect').addEventListener('change', e => {
+    state.setStreakConfig({ ...state.getStreakConfig(), goal: Number(e.target.value) });
+    refreshSettings();
+  });
+  $('streakDays').addEventListener('click', e => {
+    const chip = e.target.closest('[data-dow]');
+    if (!chip) return;
+    const dow = Number(chip.dataset.dow);
+    const config = state.getStreakConfig();
+    const days = new Set(config.days);
+    if (days.has(dow)) {
+      if (days.size === 1) { toast.show('Al menos un día tiene que contar.'); return; }
+      days.delete(dow);
+    } else days.add(dow);
+    state.setStreakConfig({ ...config, days: [...days] });
+    refreshSettings();
+    const again = $('streakDays').querySelector(`[data-dow="${dow}"]`);
+    if (again) again.focus();
   });
 
   $('leadSelect').innerHTML = LEAD_OPTIONS
@@ -941,6 +1006,20 @@ function setupClock(ctx) {
 
 /* ═════════════ Arranque ═════════════ */
 
+function setupBadges(ctx) {
+  $('streak').addEventListener('click', e => { if (e.target.closest('#openBadges')) openBadges(ctx); });
+  $('closeBadges').addEventListener('click', ctx.badgesSheet.close);
+  // Al abrir: si el historial ya da derecho a alguna insignia, se concede (una sola vez).
+  setTimeout(() => {
+    const fresh = ctx.state.checkBadges(ctx.clock());
+    if (!fresh.length) return;
+    ctx.cloud.track('badge_earned', { count: fresh.length });
+    ctx.toast.show(fresh.length === 1 ? `¡Insignia conseguida: ${fresh[0].title}!` : `¡${fresh.length} insignias conseguidas!`, {
+      label: 'Ver', duration: 7000, onAction: () => openBadges(ctx)
+    });
+  }, 4000);
+}
+
 function main() {
   const ctx = createContext();
   createRenderer(ctx);
@@ -948,6 +1027,7 @@ function main() {
   setupList(ctx);
   setupEditor(ctx);
   setupDayMenu(ctx);
+  setupBadges(ctx);
   setupStats(ctx);
   setupSettings(ctx);
   setupAccount(ctx);

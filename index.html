@@ -126,6 +126,7 @@
     <button class="menu-item" id="menuCopy"><b>Copiar a otros días</b><small>Repite este día en otros de esta semana o de la siguiente.</small></button>
     <button class="menu-item" id="menuTemplates"><b>Plantillas</b><small>Guarda este día como plantilla o añade una de las tuyas.</small></button>
     <button class="menu-item" id="menuRepeats"><b>Repeticiones</b><small>Actividades que se crean solas cada semana.</small></button>
+    <button class="menu-item" id="menuRest"><b id="menuRestT">Marcar como día de descanso</b><small id="menuRestS">No suma ni rompe tu racha.</small></button>
   </div>
   <button class="btn2 block" id="closeDay">Cerrar</button>
 </section>
@@ -172,6 +173,13 @@
   <button class="btn" id="closeRepeats">Hecho</button>
 </section>
 
+<!-- Insignias -->
+<section class="sheet" id="sheetBadges" role="dialog" aria-modal="true" aria-labelledby="sbTitle">
+  <h2 id="sbTitle">Insignias</h2>
+  <div id="badgeList"></div>
+  <button class="btn" id="closeBadges">Hecho</button>
+</section>
+
 <!-- Ajustes -->
 <section class="sheet" id="sheetSettings" role="dialog" aria-modal="true" aria-labelledby="stTitle">
   <h2 id="stTitle">Ajustes</h2>
@@ -190,6 +198,20 @@
       <p class="set-s" id="leadStatus"></p>
     </div>
     <select class="select" id="leadSelect" aria-label="Antelación del aviso"></select>
+  </div>
+
+  <div class="set-row">
+    <div>
+      <div class="set-t">Meta diaria de la racha</div>
+      <p class="set-s" id="goalStatus"></p>
+    </div>
+    <select class="select" id="goalSelect" aria-label="Meta diaria de la racha"></select>
+  </div>
+
+  <div class="set-block">
+    <div class="set-t">Días que cuentan para la racha</div>
+    <p class="set-s" id="streakDaysStatus"></p>
+    <div class="chips" id="streakDays" role="group" aria-label="Días que cuentan para la racha"></div>
   </div>
 
   <div class="set-row">

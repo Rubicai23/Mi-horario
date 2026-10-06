@@ -7,7 +7,7 @@
  */
 import { CATEGORIES, DAY_LETTERS, DAY_NAMES } from './config.js';
 import {
-  addDays, escapeHtml, formatDuration, formatLongDate, formatShortDate, formatTotal, pad, plural, toDateKey, toHHMM
+  addDays, escapeHtml, formatDuration, formatLongDate, formatShortDate, formatTotal, pad, parseDateKey, plural, toDateKey, toHHMM
 } from './utils.js';
 
 export const $ = id => document.getElementById(id);
@@ -26,6 +26,7 @@ export const ICONS = Object.freeze({
   star: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.2l2.6 5.5 6 .8-4.4 4.2 1.1 6-5.3-2.9-5.3 2.9 1.1-6L3.4 9.5l6-.8z"/></svg>',
   copy: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8.5" y="8.5" width="11" height="11" rx="2"/><path d="M15.5 8.5V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v7.5a2 2 0 0 0 2 2h2.5"/></svg>',
   repeat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2.5l3 3-3 3"/><path d="M4 11.5v-2a4 4 0 0 1 4-4h12"/><path d="M7 21.5l-3-3 3-3"/><path d="M20 12.5v2a4 4 0 0 1-4 4H4"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z"/></svg>',
   left: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 6L8.5 12l6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   right: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9.5 6l6 6-6 6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 });
@@ -109,36 +110,55 @@ export function otherDayHeroMarkup({ date, blocks }) {
 /* ── Racha ── */
 
 const WEEK_LABEL = Object.freeze({
-  met: 'objetivo cumplido', missed: 'objetivo no cumplido', pending: 'en curso', rest: 'sin actividades', future: 'por llegar'
+  met: 'objetivo cumplido', missed: 'objetivo no cumplido', pending: 'en curso', rest: 'sin actividades', future: 'por llegar',
+  restday: 'día de descanso', off: 'no cuenta para la racha'
 });
 
-const streakMessage = ({ current, today }) => {
+const streakMessage = ({ current, today, goal, restToday, countsToday }) => {
+  const keep = current > 0 ? ` Tu racha de ${plural(current, 'día', 'días')} sigue en pie.` : '';
+  if (restToday) return `Hoy es tu día de descanso.${keep}`;
+  if (!countsToday) return `Hoy no cuenta para tu racha, según tus ajustes.${keep}`;
   if (today.total === 0) {
     return current > 0
-      ? `Hoy no tienes actividades. Tu racha de ${plural(current, 'día', 'días')} sigue en pie.`
-      : 'Planifica tu día y completa el 80 % de las actividades para empezar una racha.';
+      ? `Hoy no tienes actividades.${keep}`
+      : `Planifica tu día y completa el ${goal} % de las actividades para empezar una racha.`;
   }
   if (today.met) return `Objetivo de hoy cumplido: ${today.done} de ${today.total}.`;
-  const goal = current > 0 ? `llegar a ${plural(current + 1, 'día', 'días')} de racha` : 'empezar tu racha';
-  return `Hoy llevas ${today.done} de ${today.total}. Completa ${plural(today.remaining, 'actividad más', 'actividades más')} para ${goal}.`;
+  const target = current > 0 ? `llegar a ${plural(current + 1, 'día', 'días')} de racha` : 'empezar tu racha';
+  return `Hoy llevas ${today.done} de ${today.total}. Completa ${plural(today.remaining, 'actividad más', 'actividades más')} para ${target}.`;
 };
 
-/** Tarjeta de racha: días seguidos con ≥ 80 % completado, semana actual y progreso de hoy. */
+/** Tarjeta de racha: días seguidos que cumplen la meta, semana actual y progreso de hoy. */
 export function streakMarkup(view) {
-  const { current, best, week, today } = view;
+  const { current, best, week, today, goal } = view;
   const dots = week.map(d => (
     `<li class="wk wk-${d.status}${d.isToday ? ' wk-today' : ''}" aria-label="${DAY_NAMES[d.dow]}: ${WEEK_LABEL[d.status]}">` +
-    `<span class="wk-dot">${d.status === 'met' ? ICONS.check : ''}</span><span class="wk-l">${DAY_LETTERS[d.dow]}</span></li>`
+    `<span class="wk-dot">${d.status === 'met' ? ICONS.check : d.status === 'restday' ? ICONS.moon : ''}</span><span class="wk-l">${DAY_LETTERS[d.dow]}</span></li>`
   )).join('');
   const pct = today.total ? Math.round((today.done / today.total) * 100) : 0;
-  const bar = today.total
-    ? `<div class="streak-bar${today.met ? ' met' : ''}" role="progressbar" aria-label="Actividades de hoy completadas" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i><span class="goal" aria-hidden="true"></span></div>`
+  const bar = today.total && !view.restToday && view.countsToday
+    ? `<div class="streak-bar${today.met ? ' met' : ''}" role="progressbar" aria-label="Actividades de hoy completadas" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i><span class="goal" style="left:${goal}%" aria-hidden="true"></span></div>`
     : '';
   return `<div class="streak-top">` +
     `<div class="streak-count${current > 0 ? ' lit' : ''}">${ICONS.flame}<b>${current}</b><span>${current === 1 ? 'día' : 'días'} de racha</span></div>` +
     `<ol class="streak-week" aria-label="Esta semana">${dots}</ol></div>` +
     `<p class="streak-msg">${streakMessage(view)}</p>${bar}` +
-    (best > 0 ? `<p class="streak-best">Mejor racha: ${plural(best, 'día', 'días')}</p>` : '');
+    `<div class="streak-foot">${best > 0 ? `<p class="streak-best">Mejor racha: ${plural(best, 'día', 'días')}</p>` : '<span></span>'}` +
+    `<button type="button" class="link" id="openBadges">Insignias</button></div>`;
+}
+
+/** Hoja de insignias: las logradas con su fecha y las pendientes con su avance. */
+export function badgesMarkup(list) {
+  const earned = list.filter(b => b.earnedOn).length;
+  const head = `<p class="set-s menu-sub">${earned} de ${list.length} conseguidas</p>`;
+  return head + '<ul class="badge-grid">' + list.map(b => {
+    const got = Boolean(b.earnedOn);
+    const date = got ? `Conseguida el ${formatShortDate(parseDateKey(b.earnedOn))}` : `${b.value} de ${b.target}`;
+    const bar = got ? '' : `<span class="track"><i style="width:${(b.value / b.target * 100).toFixed(0)}%"></i></span>`;
+    return `<li class="badge${got ? ' got' : ''}"><span class="badge-ic">${ICONS[b.icon] || ICONS.star}</span>` +
+      `<span class="badge-tx"><b>${escapeHtml(b.title)}</b><small>${escapeHtml(b.desc)}</small>` +
+      `<em>${date}</em>${bar}</span></li>`;
+  }).join('') + '</ul>';
 }
 
 /* ── Lista ── */

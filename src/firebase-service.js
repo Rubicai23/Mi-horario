@@ -4,7 +4,7 @@
  *
  * Modelo de datos:
  *   users/{uid}/days/{YYYY-MM-DD}  →  { blocks: [...], updatedAt: serverTimestamp }
- *   users/{uid}/profile/main       →  { templates: [...], recurring: [...], updatedAt: serverTimestamp }
+ *   users/{uid}/profile/main       →  { templates, recurring, rest, streak, badges, updatedAt: serverTimestamp }
  *
  * Estados de cuenta: loading → signedIn | signedOut | unavailable
  */
@@ -191,6 +191,9 @@ export function createCloudService({ config, native = false }) {
         await setDoc(profileRef(uid), {
           templates: JSON.parse(JSON.stringify(profile.templates)),
           recurring: JSON.parse(JSON.stringify(profile.recurring)),
+          rest: JSON.parse(JSON.stringify(profile.rest || [])),
+          streak: JSON.parse(JSON.stringify(profile.streak || { goal: 80, days: [0, 1, 2, 3, 4, 5, 6] })),
+          badges: JSON.parse(JSON.stringify(profile.badges || {})),
           updatedAt: serverTimestamp()
         });
         return true;

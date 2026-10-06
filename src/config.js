@@ -22,7 +22,9 @@ export const LIMITS = Object.freeze({
   templateName: 40,
   recurring: 40,                        // debe coincidir con firestore.rules
   subtasks: 15,
-  subtaskLength: 60
+  subtaskLength: 60,
+  restDays: 400,                        // debe coincidir con firestore.rules
+  badges: 40                            // debe coincidir con firestore.rules
 });
 
 /** Minutos de antelación que se pueden elegir para los avisos (0 = al empezar). */
@@ -36,8 +38,30 @@ export const STREAK_RULES = Object.freeze({
   goalNum: 4,
   goalDen: 5,               // 4/5 = 80 %
   maxRestGap: 2,            // días vacíos seguidos que no rompen la racha (p. ej. un fin de semana sin plan)
-  maxLookbackDays: 730
+  maxLookbackDays: 730,
+  defaultGoal: 80,          // % por defecto
+  goalOptions: Object.freeze([50, 60, 70, 80, 90, 100])
 });
+
+/**
+ * Insignias. Se calculan con el historial y, al conseguirlas, se guardan con su fecha.
+ * kind: done = actividades completadas en total · streak = mejor racha · days = días con objetivo cumplido
+ *       week = semanas perfectas (objetivo cumplido todos los días con actividades, mínimo 3 días).
+ */
+export const BADGES = Object.freeze([
+  { id: 'primer-paso',    kind: 'done',   target: 1,   icon: 'check', title: 'Primer paso',      desc: 'Completa tu primera actividad.' },
+  { id: 'en-marcha',      kind: 'done',   target: 25,  icon: 'check', title: 'En marcha',        desc: 'Completa 25 actividades.' },
+  { id: 'cien-hechas',    kind: 'done',   target: 100, icon: 'check', title: 'Cien hechas',      desc: 'Completa 100 actividades.' },
+  { id: 'imparable',      kind: 'done',   target: 500, icon: 'check', title: 'Imparable',        desc: 'Completa 500 actividades.' },
+  { id: 'racha-3',        kind: 'streak', target: 3,   icon: 'flame', title: 'Tres seguidos',    desc: 'Racha de 3 días.' },
+  { id: 'racha-7',        kind: 'streak', target: 7,   icon: 'flame', title: 'Semana de fuego',  desc: 'Racha de 7 días.' },
+  { id: 'racha-14',       kind: 'streak', target: 14,  icon: 'flame', title: 'Dos semanas',      desc: 'Racha de 14 días.' },
+  { id: 'racha-30',       kind: 'streak', target: 30,  icon: 'flame', title: 'Mes de hierro',    desc: 'Racha de 30 días.' },
+  { id: 'racha-100',      kind: 'streak', target: 100, icon: 'flame', title: 'Centenario',       desc: 'Racha de 100 días.' },
+  { id: 'dias-10',        kind: 'days',   target: 10,  icon: 'star',  title: 'Buen ritmo',       desc: 'Cumple el objetivo en 10 días.' },
+  { id: 'dias-50',        kind: 'days',   target: 50,  icon: 'star',  title: 'Medio centenar',   desc: 'Cumple el objetivo en 50 días.' },
+  { id: 'semana-perfecta', kind: 'week',  target: 1,   icon: 'star',  title: 'Semana perfecta',  desc: 'Cumple el objetivo todos los días con actividades de una semana (mínimo 3 días).' }
+]);
 
 export const NOTIFICATIONS = Object.freeze({
   nativeHorizonDays: 7,     // días por delante que se programan en Android/iOS
