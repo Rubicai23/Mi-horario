@@ -91,7 +91,8 @@ const HERO_BODY = {
     let line = '';
     if (nextDay) {
       const tomorrow = toDateKey(nextDay.date) === toDateKey(addDays(now, 1));
-      line = `<p class="next">${t('{0} empiezas a las {1}.', tomorrow ? t('Mañana') : DAY_NAMES[nextDay.date.getDay()], `<b>${toHHMM(nextDay.first)}</b>`)}</p>`;
+      const at = `<b>${toHHMM(nextDay.first)}</b>`;
+      line = `<p class="next">${tomorrow ? t('Mañana empiezas a las {0}.', at) : t('{0} empiezas a las {1}.', DAY_NAMES[nextDay.date.getDay()], at)}</p>`;
     }
     return `<p class="now-title">Día completado</p><p class="now-sub">Descansa, ya no queda nada por hacer.</p>${line}`;
   }
@@ -400,6 +401,7 @@ export function createSheetManager({ overlay, inert = [] }) {
     if (active && active !== el) close();
     opener = document.activeElement;
     active = el;
+    el.scrollTop = 0;
     el.setAttribute('tabindex', '-1');
     el.classList.add('open');
     overlay.classList.add('open');

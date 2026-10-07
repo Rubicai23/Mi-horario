@@ -495,7 +495,7 @@ button { font-family: inherit; }
 @media (prefers-reduced-motion: reduce) { .pomo-bar i { transition: none; } }
 
 /* ───── Tutorial ───── */
-.tour { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; background: color-mix(in srgb, var(--bg) 92%, transparent); }
+.tour { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); }
 .tour[hidden] { display: none; }
 .tour-card { width: 100%; max-width: 380px; text-align: center; }
 .tour-art { font-size: 64px; line-height: 1; margin-bottom: 18px; }

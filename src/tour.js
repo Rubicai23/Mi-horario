@@ -57,5 +57,15 @@ export function setupTour(ctx) {
 
   $('tourNext').addEventListener('click', () => { if (step >= STEPS.length - 1) close(); else { step += 1; paint(); } });
   $('tourSkip').addEventListener('click', close);
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('tour').hidden) close(); });
+  document.addEventListener('keydown', e => {
+    if ($('tour').hidden) return;
+    if (e.key === 'Escape') { close(); return; }
+    if (e.key !== 'Tab') return;
+    // El foco se queda dentro del tutorial.
+    const items = Array.from($('tour').querySelectorAll('button')).filter(b => !b.hidden);
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
 }

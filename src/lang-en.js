@@ -94,7 +94,7 @@ export const EN = Object.freeze({
   'Elige un punto de partida y ajústalo a tu gusto.': 'Pick a starting point and adjust it to your liking.',
   '{0} – {1}, quedan {2}': '{0} – {1}, {2} left', 'Después: {0} a las {1}.': 'After that: {0} at {1}.',
   'Es la última actividad de hoy.': 'It is the last activity today.', 'Ahora no hay nada programado': 'Nothing is scheduled right now',
-  'Faltan {0} para las {1}': '{0} until {1}', 'Siguiente: {0}.': 'Next: {0}.', '{0} empiezas a las {1}.': '{0} you start at {1}.',
+  'Faltan {0} para las {1}': '{0} until {1}', 'Siguiente: {0}.': 'Next: {0}.', '{0} empiezas a las {1}.': 'On {0} you start at {1}.', 'Mañana empiezas a las {0}.': 'Tomorrow you start at {0}.',
   'Mañana': 'Tomorrow', 'Día completado': 'Day complete', 'Descansa, ya no queda nada por hacer.': 'Rest up, there is nothing left to do.',
   'Sin actividades. Elige un punto de partida más abajo.': 'No activities. Pick a starting point below.', 'Volver a hoy': 'Back to today',
   'objetivo cumplido': 'goal met', 'objetivo no cumplido': 'goal not met', 'en curso': 'in progress', 'sin actividades': 'no activities',
