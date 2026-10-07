@@ -25,6 +25,10 @@
   <header class="top">
     <span class="brand">Mi horario</span>
     <div class="tools">
+      <button class="pomo-pill" id="pomoPill" type="button" hidden aria-label="Abrir el Pomodoro"></button>
+      <button class="icon-btn" id="openMenu" aria-label="Menú">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
       <button class="icon-btn" id="openStats" aria-label="Estadísticas de la semana">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 20V11M12 20V4M18 20v-6"/></svg>
       </button>
@@ -71,6 +75,20 @@
       <p class="set-s legal-note">Al crear una cuenta aceptas los <a href="privacidad.html#terminos" target="_blank" rel="noopener">términos de uso</a> y la <a href="privacidad.html#privacidad" target="_blank" rel="noopener">política de privacidad</a>.</p>
     </form>
     <button class="btn2 block" type="button" id="retryBtn" hidden>Reintentar</button>
+  </div>
+</div>
+
+<!-- Tutorial -->
+<div class="tour" id="tour" role="dialog" aria-modal="true" aria-labelledby="tourTitle" hidden>
+  <div class="tour-card">
+    <div class="tour-art" id="tourArt" aria-hidden="true"></div>
+    <h2 id="tourTitle"></h2>
+    <p class="tour-text" id="tourText"></p>
+    <div class="tour-dots" id="tourDots" aria-hidden="true"></div>
+    <div class="set-btns tour-btns">
+      <button class="btn2" id="tourSkip" type="button">Saltar</button>
+      <button class="btn" id="tourNext" type="button">Siguiente</button>
+    </div>
   </div>
 </div>
 
@@ -196,6 +214,42 @@
   <div class="sub"><button id="delCancel">Cancelar</button></div>
 </section>
 
+<!-- Menú principal -->
+<section class="sheet" id="sheetMenu" role="dialog" aria-modal="true" aria-labelledby="smTitle">
+  <h2 id="smTitle">Menú</h2>
+  <div class="menu">
+    <button class="menu-item" id="menuPomo"><b>Pomodoro</b><small>Temporizador para concentrarte por tramos, con descansos.</small></button>
+    <button class="menu-item" id="menuBadges"><b>Insignias</b><small>Tus logros y lo que te falta para el siguiente.</small></button>
+    <button class="menu-item" id="menuTour"><b>Ver tutorial</b><small>Repasa en 3 pantallas cómo funciona la app.</small></button>
+  </div>
+  <button class="btn2 block" id="closeMenu">Cerrar</button>
+</section>
+
+<!-- Pomodoro -->
+<section class="sheet" id="sheetPomodoro" role="dialog" aria-modal="true" aria-labelledby="spTitle">
+  <h2 id="spTitle">Pomodoro</h2>
+  <div class="pomo">
+    <p class="pomo-phase" id="pomoPhase"></p>
+    <div class="pomo-time" id="pomoTime" role="timer" aria-live="off">25:00</div>
+    <div class="pomo-bar"><i id="pomoFill"></i></div>
+    <p class="set-s pomo-round" id="pomoRound"></p>
+    <div class="set-btns pomo-btns">
+      <button class="btn" id="pomoToggle">Empezar</button>
+      <button class="btn2" id="pomoSkip">Saltar</button>
+      <button class="btn2" id="pomoReset">Reiniciar</button>
+    </div>
+    <p class="set-s" id="pomoToday"></p>
+  </div>
+  <div class="set-block">
+    <div class="set-t">Ajustes</div>
+    <div class="set-row slim"><div class="set-t">Concentración</div><select class="select" id="pomoFocus" aria-label="Minutos de concentración"></select></div>
+    <div class="set-row slim"><div class="set-t">Descanso corto</div><select class="select" id="pomoShort" aria-label="Minutos de descanso corto"></select></div>
+    <div class="set-row slim"><div class="set-t">Descanso largo</div><select class="select" id="pomoLong" aria-label="Minutos de descanso largo"></select></div>
+    <div class="set-row slim"><div class="set-t">Rondas hasta el largo</div><select class="select" id="pomoRounds" aria-label="Rondas hasta el descanso largo"></select></div>
+  </div>
+  <button class="btn" id="closePomo">Hecho</button>
+</section>
+
 <!-- Insignias -->
 <section class="sheet" id="sheetBadges" role="dialog" aria-modal="true" aria-labelledby="sbTitle">
   <h2 id="sbTitle">Insignias</h2>
@@ -237,6 +291,17 @@
     <div class="chips" id="streakDays" role="group" aria-label="Días que cuentan para la racha"></div>
   </div>
 
+  <div class="set-row">
+    <div>
+      <div class="set-t">Idioma</div>
+      <p class="set-s">Cambia el idioma de la app. Tus actividades no se traducen.</p>
+    </div>
+    <select class="select" id="langSelect" aria-label="Idioma" translate="no">
+      <option value="es">Español</option>
+      <option value="en">English</option>
+    </select>
+  </div>
+
   <div class="set-block">
     <div class="set-t">Aspecto</div>
     <p class="set-s">Solo de este dispositivo.</p>
@@ -250,6 +315,14 @@
       <p class="set-s">Cambia el nombre y el color de cada categoría.</p>
     </div>
     <button class="btn2" type="button" id="openCats">Editar</button>
+  </div>
+
+  <div class="set-row">
+    <div>
+      <div class="set-t">Compartir resumen semanal</div>
+      <p class="set-s" id="shareStatus"></p>
+    </div>
+    <button class="switch" id="shareSwitch" role="switch" aria-checked="false" aria-label="Compartir resumen semanal"><i></i></button>
   </div>
 
   <div class="set-row">
@@ -300,6 +373,7 @@
   <div class="weeknav" id="statsNav" hidden></div>
   <p class="set-s range" id="statsRange"></p>
   <div id="statsBody"></div>
+  <div class="set-btns" id="shareRow" hidden><button class="btn2" id="shareStats" type="button">Compartir resumen</button></div>
   <p class="set-s foot-note">Cuenta como hecho lo que marcas con el círculo de cada actividad.</p>
   <button class="btn" id="closeStats">Cerrar</button>
 </section>

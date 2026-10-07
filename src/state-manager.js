@@ -16,6 +16,7 @@ import {
 import {
   addDays, diffDays, fromHHMM, isDateKey, parseDateKey, startOfDay, toDateKey, toHHMM, uid, weekDates
 } from './utils.js';
+import { t as translate } from './i18n.js';
 
 const CATEGORY_KEYS = new Set(CATEGORIES.map(c => c.key));
 const BLOCK_ID_RE = /^[\w-]{1,40}$/;
@@ -26,7 +27,8 @@ const BACKUP_SETTINGS = Object.freeze({
   [`${STORAGE.settingPrefix}notify`]: value => value === '0' || value === '1',
   [`${STORAGE.settingPrefix}lead`]: value => /^\d+$/.test(value) && LEAD_OPTIONS.includes(Number(value)),
   [`${STORAGE.settingPrefix}theme`]: value => THEMES.some(t => t.key === value),
-  [`${STORAGE.settingPrefix}accent`]: value => ACCENTS.some(a => a.key === value)
+  [`${STORAGE.settingPrefix}accent`]: value => ACCENTS.some(a => a.key === value),
+  [`${STORAGE.settingPrefix}lang`]: value => value === 'es' || value === 'en'
 });
 const BACKUP_SETTING_KEYS = Object.freeze(Object.keys(BACKUP_SETTINGS));
 const RULE_ID_RE = /^r[a-z0-9]{1,20}$/;
@@ -426,9 +428,9 @@ export function placeBlocks(existing, candidates) {
 export function instantiatePreset(preset, dow, existing) {
   const rows = preset.rows(dow) || [];
   const candidates = rows
-    .map(([from, to, t, c, subtasks]) => sanitizeBlock({
-      id: uid(), s: fromHHMM(from), e: fromHHMM(to), t, c, n: '', d: false, p: preset.id,
-      k: (subtasks || []).map(text => ({ t: text, d: false }))
+    .map(([from, to, title, c, subtasks]) => sanitizeBlock({
+      id: uid(), s: fromHHMM(from), e: fromHHMM(to), t: translate(title), c, n: '', d: false, p: preset.id,
+      k: (subtasks || []).map(text => ({ t: translate(text), d: false }))
     }))
     .filter(Boolean);
   return placeBlocks(existing, candidates);

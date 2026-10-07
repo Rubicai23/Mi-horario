@@ -3,6 +3,8 @@
  * Todas las fechas se manejan en hora local del dispositivo.
  */
 
+import { LOCALE, pluralWords, t } from './i18n.js';
+
 export const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /* ───────── Horas (minutos desde medianoche) ───────── */
@@ -21,7 +23,7 @@ export const fromHHMM = value => {
 
 export const formatDuration = total => {
   const m = Math.max(0, Math.ceil(total));
-  if (m < 1) return 'menos de 1 min';
+  if (m < 1) return t('menos de 1 min');
   const h = Math.floor(m / 60);
   const r = m % 60;
   if (h && r) return `${h} h ${r} min`;
@@ -82,13 +84,16 @@ export const escapeHtml = value => String(value).replace(/[&<>"']/g, c => (
   { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
 ));
 
-export const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+export const plural = (n, one, many) => {
+  const [singular, other] = pluralWords(one, many);
+  return `${n} ${n === 1 ? singular : other}`;
+};
 
 /** "Inglés (45 min, enfoque total)" -> "Inglés" */
 export const shortTitle = title => title.split(/[(:]/)[0].trim() || title;
 
-export const formatLongDate = date => capitalize(date.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' }));
-export const formatShortDate = date => date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+export const formatLongDate = date => capitalize(date.toLocaleDateString(LOCALE, { weekday: 'long', day: 'numeric', month: 'long' }));
+export const formatShortDate = date => date.toLocaleDateString(LOCALE, { day: 'numeric', month: 'short' });
 
 /* ───────── Identificadores ───────── */
 export const uid = () => {

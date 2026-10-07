@@ -25,8 +25,13 @@ mi-horario-v2/
 │   ├── platform.js         Web vs nativo: notificaciones, archivos, instalación
 │   ├── config.js           Constantes, plantillas y configuración de Firebase
 │   ├── utils.js            Funciones puras
+│   ├── pomodoro.js         Temporizador Pomodoro (puro) · pomodoro-ui.js: menú ☰ y pantalla
+│   ├── tour.js             Tutorial de 3 pantallas
+│   ├── summary.js          Texto del resumen semanal para compartir
+│   ├── i18n.js · lang-en.js  Idioma: traductor y diccionario español → inglés
 │   └── style.css
-├── tests/                  state-manager, templates-copy, recurring-subtasks, streak-badges, categories-month
+├── tests/                  state-manager, templates-copy, recurring-subtasks, streak-badges, categories-month, pomodoro, summary, i18n
+├── e2e/                    Pruebas en navegador (Playwright) con servidor y Firebase simulados
 └── .github/workflows/deploy.yml
 ```
 
@@ -87,3 +92,13 @@ npm run cap:ios
 - iOS limita a 64 notificaciones locales pendientes; la app programa como máximo 60 de los próximos 7 días.
 - Analytics no está soportado en el contenedor nativo; la app lo desactiva ahí.
 - Los iconos de las tiendas (adaptativos de Android, AppIcon de iOS) se generan aparte, p. ej. con `@capacitor/assets`.
+
+## Tanda 5: menú, Pomodoro, tutorial, resumen e inglés
+
+- **Menú ☰** (arriba): Pomodoro, Insignias y Ver tutorial. Con el Pomodoro en marcha aparece un contador en la barra superior.
+- **Pomodoro**: usa la hora de fin (`endAt`), así que no se descuadra si el móvil congela la pestaña. Al acabar una fase avisa (mensaje, vibración, pitido y, si los avisos están activados, notificación; en la app nativa se programa una notificación con id fijo `POMO_ID` que la reprogramación de actividades no toca). Guarda su estado en `cfg:pomo` (solo este dispositivo).
+- **Tutorial**: sale una vez a quien estrena la app (sin días guardados). Quien ya tenía datos no lo ve, pero puede abrirlo desde el menú.
+- **Resumen semanal**: desactivado de fábrica (`cfg:share`). Si se activa en Ajustes, Estadísticas muestra «Compartir resumen»: texto con totales por categoría y racha, nunca títulos ni notas.
+- **Inglés**: el idioma (`cfg:lang`) se lee al cargar y cambiarlo recarga la app. Los textos en español son la clave del diccionario `lang-en.js`; una clave con huecos `{0}` sirve también de patrón para traducir textos ya montados. El traductor del DOM solo se activa en inglés y respeta `translate="no"` (contenido del usuario). Hay una política de privacidad en inglés (`privacy-en.html`). El horario DAM de ejemplo solo existe en español. `tests/i18n.test.js` comprueba que todo texto fijo y todo `t('…')` tiene traducción.
+- **Reglas de Firestore**: sin cambios en esta tanda.
+- **Pruebas en navegador** (`e2e/`): `node e2e/server.mjs` con `APP_ROOT` apuntando al proyecto y `node e2e/t5.mjs`; necesitan Playwright instalado.

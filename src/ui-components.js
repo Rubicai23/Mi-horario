@@ -5,6 +5,7 @@
  * No conoce el estado de la app ni Firebase: recibe datos ya calculados y devuelve cadenas o
  * llama a las funciones que le pasan. Todo texto de usuario se escapa con escapeHtml.
  */
+import { t } from './i18n.js';
 import { ACCENTS, CATEGORIES, CATEGORY_COLORS, DAY_LETTERS, DAY_NAMES, DEFAULT_CATEGORY_COLOR, THEMES } from './config.js';
 import {
   addDays, escapeHtml, formatDuration, formatLongDate, formatShortDate, formatTotal, pad, parseDateKey, plural, toDateKey, toHHMM
@@ -67,7 +68,7 @@ export function dayStripMarkup({ dates, today, selectedDow }) {
 /* ── Hero ── */
 
 const nextDayLine = nextDay => (nextDay
-  ? `<p class="next">Próxima actividad: <b>${DAY_NAMES[nextDay.date.getDay()].toLowerCase()}</b> a las <b>${toHHMM(nextDay.first)}</b>.</p>`
+  ? `<p class="next">${t('Próxima actividad: {0} a las {1}.', `<b>${DAY_NAMES[nextDay.date.getDay()].toLowerCase()}</b>`, `<b>${toHHMM(nextDay.first)}</b>`)}</p>`
   : '');
 
 const HERO_BODY = {
@@ -77,20 +78,20 @@ const HERO_BODY = {
   current: ({ status, nowMin }) => {
     const { block, next, progress } = status;
     const pct = Math.min(100, Math.max(0, progress * 100));
-    return `<p class="now-title">${escapeHtml(block.t)}</p>` +
+    return `<p class="now-title" translate="no">${escapeHtml(block.t)}</p>` +
       `<p class="now-sub">${toHHMM(block.s)} – ${toHHMM(block.e)}, quedan ${formatDuration(block.e - nowMin)}</p>` +
       `<div class="bar" role="progressbar" aria-label="Progreso de la actividad" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}"><i style="width:${pct.toFixed(1)}%"></i></div>` +
-      (next ? `<p class="next">Después: <b>${escapeHtml(next.t)}</b> a las ${toHHMM(next.s)}.</p>` : '<p class="next">Es la última actividad de hoy.</p>');
+      (next ? `<p class="next">${t('Después: {0} a las {1}.', `<b translate="no">${escapeHtml(next.t)}</b>`, toHHMM(next.s))}</p>` : '<p class="next">Es la última actividad de hoy.</p>');
   },
   upcoming: ({ status, nowMin }) => (
     '<p class="now-title">Ahora no hay nada programado</p>' +
     `<p class="now-sub">Faltan ${formatDuration(status.block.s - nowMin)} para las ${toHHMM(status.block.s)}</p>` +
-    `<p class="next">Siguiente: <b>${escapeHtml(status.block.t)}</b>.</p>`),
+    `<p class="next">${t('Siguiente: {0}.', `<b translate="no">${escapeHtml(status.block.t)}</b>`)}</p>`),
   finished: ({ now, nextDay }) => {
     let line = '';
     if (nextDay) {
       const tomorrow = toDateKey(nextDay.date) === toDateKey(addDays(now, 1));
-      line = `<p class="next">${tomorrow ? 'Mañana' : DAY_NAMES[nextDay.date.getDay()]} empiezas a las <b>${toHHMM(nextDay.first)}</b>.</p>`;
+      line = `<p class="next">${t('{0} empiezas a las {1}.', tomorrow ? t('Mañana') : DAY_NAMES[nextDay.date.getDay()], `<b>${toHHMM(nextDay.first)}</b>`)}</p>`;
     }
     return `<p class="now-title">Día completado</p><p class="now-sub">Descansa, ya no queda nada por hacer.</p>${line}`;
   }
@@ -115,22 +116,22 @@ export function otherDayHeroMarkup({ date, blocks }) {
 /* ── Racha ── */
 
 const WEEK_LABEL = Object.freeze({
-  met: 'objetivo cumplido', missed: 'objetivo no cumplido', pending: 'en curso', rest: 'sin actividades', future: 'por llegar',
-  restday: 'día de descanso', off: 'no cuenta para la racha'
+  met: t('objetivo cumplido'), missed: t('objetivo no cumplido'), pending: t('en curso'), rest: t('sin actividades'), future: t('por llegar'),
+  restday: t('día de descanso'), off: t('no cuenta para la racha')
 });
 
 const streakMessage = ({ current, today, goal, restToday, countsToday }) => {
-  const keep = current > 0 ? ` Tu racha de ${plural(current, 'día', 'días')} sigue en pie.` : '';
-  if (restToday) return `Hoy es tu día de descanso.${keep}`;
-  if (!countsToday) return `Hoy no cuenta para tu racha, según tus ajustes.${keep}`;
+  const keep = current > 0 ? t(' Tu racha de {0} sigue en pie.', plural(current, 'día', 'días')) : '';
+  if (restToday) return t('Hoy es tu día de descanso.{0}', keep);
+  if (!countsToday) return t('Hoy no cuenta para tu racha, según tus ajustes.{0}', keep);
   if (today.total === 0) {
     return current > 0
-      ? `Hoy no tienes actividades.${keep}`
-      : `Planifica tu día y completa el ${goal} % de las actividades para empezar una racha.`;
+      ? t('Hoy no tienes actividades.{0}', keep)
+      : t('Planifica tu día y completa el {0} % de las actividades para empezar una racha.', goal);
   }
-  if (today.met) return `Objetivo de hoy cumplido: ${today.done} de ${today.total}.`;
-  const target = current > 0 ? `llegar a ${plural(current + 1, 'día', 'días')} de racha` : 'empezar tu racha';
-  return `Hoy llevas ${today.done} de ${today.total}. Completa ${plural(today.remaining, 'actividad más', 'actividades más')} para ${target}.`;
+  if (today.met) return t('Objetivo de hoy cumplido: {0} de {1}.', today.done, today.total);
+  const target = current > 0 ? t('llegar a {0} de racha', plural(current + 1, 'día', 'días')) : t('empezar tu racha');
+  return t('Hoy llevas {0} de {1}. Completa {2} para {3}.', today.done, today.total, plural(today.remaining, 'actividad más', 'actividades más'), target);
 };
 
 /** Tarjeta de racha: días seguidos que cumplen la meta, semana actual y progreso de hoy. */
@@ -145,20 +146,20 @@ export function streakMarkup(view) {
     ? `<div class="streak-bar${today.met ? ' met' : ''}" role="progressbar" aria-label="Actividades de hoy completadas" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i><span class="goal" style="left:${goal}%" aria-hidden="true"></span></div>`
     : '';
   return `<div class="streak-top">` +
-    `<div class="streak-count${current > 0 ? ' lit' : ''}">${ICONS.flame}<b>${current}</b><span>${current === 1 ? 'día' : 'días'} de racha</span></div>` +
+    `<div class="streak-count${current > 0 ? ' lit' : ''}">${ICONS.flame}<b>${current}</b><span>${current === 1 ? t('día de racha') : t('días de racha')}</span></div>` +
     `<ol class="streak-week" aria-label="Esta semana">${dots}</ol></div>` +
     `<p class="streak-msg">${streakMessage(view)}</p>${bar}` +
-    `<div class="streak-foot">${best > 0 ? `<p class="streak-best">Mejor racha: ${plural(best, 'día', 'días')}</p>` : '<span></span>'}` +
+    `<div class="streak-foot">${best > 0 ? `<p class="streak-best">${t('Mejor racha: {0}', plural(best, 'día', 'días'))}</p>` : '<span></span>'}` +
     `<button type="button" class="link" id="openBadges">Insignias</button></div>`;
 }
 
 /** Hoja de insignias: las logradas con su fecha y las pendientes con su avance. */
 export function badgesMarkup(list) {
   const earned = list.filter(b => b.earnedOn).length;
-  const head = `<p class="set-s menu-sub">${earned} de ${list.length} conseguidas</p>`;
+  const head = `<p class="set-s menu-sub">${t('{0} de {1} conseguidas', earned, list.length)}</p>`;
   return head + '<ul class="badge-grid">' + list.map(b => {
     const got = Boolean(b.earnedOn);
-    const date = got ? `Conseguida el ${formatShortDate(parseDateKey(b.earnedOn))}` : `${b.value} de ${b.target}`;
+    const date = got ? t('Conseguida el {0}', formatShortDate(parseDateKey(b.earnedOn))) : t('{0} de {1}', b.value, b.target);
     const bar = got ? '' : `<span class="track"><i style="width:${(b.value / b.target * 100).toFixed(0)}%"></i></span>`;
     return `<li class="badge${got ? ' got' : ''}"><span class="badge-ic">${ICONS[b.icon] || ICONS.star}</span>` +
       `<span class="badge-tx"><b>${escapeHtml(b.title)}</b><small>${escapeHtml(b.desc)}</small>` +
@@ -177,7 +178,7 @@ const presetCardMarkup = p => (
 /** Onboarding: un día sin actividades ofrece plantillas de un solo toque. */
 export function onboardingMarkup({ presets, welcome }) {
   return '<li class="onboard">' +
-    `<p class="onboard-t">${welcome ? 'Empieza con un punto de partida' : 'Elige un punto de partida'}</p>` +
+    `<p class="onboard-t">${welcome ? t('Empieza con un punto de partida') : t('Elige un punto de partida')}</p>` +
     '<p class="onboard-s">Un toque añade las actividades. Después puedes cambiar horas y nombres, o crear las tuyas con Añadir.</p>' +
     `<div class="preset-list">${presets.map(presetCardMarkup).join('')}</div></li>`;
 }
@@ -192,15 +193,15 @@ export function quickAddMarkup(presets) {
 
 const itemMeta = b => {
   const parts = [];
-  if (b.r) parts.push(`<span class="mt">${ICONS.repeat}Cada semana</span>`);
-  if (b.k && b.k.length) parts.push(`<span class="mt">${b.k.filter(item => item.d).length}/${b.k.length} subtareas</span>`);
+  if (b.r) parts.push(`<span class="mt">${ICONS.repeat}${t('Cada semana')}</span>`);
+  if (b.k && b.k.length) parts.push(`<span class="mt">${t('{0}/{1} subtareas', b.k.filter(item => item.d).length, b.k.length)}</span>`);
   return parts.length ? `<div class="meta">${parts.join('')}</div>` : '';
 };
 
 const itemMarkup = (b, { past, current, sorting }) => {
   const classes = `row${past ? ' past' : ''}${current ? ' cur' : ''}${b.d ? ' done' : ''}`;
   let note = '';
-  if (b.n) note = `<div class="no">${escapeHtml(b.n)}</div>`;
+  if (b.n) note = `<div class="no" translate="no">${escapeHtml(b.n)}</div>`;
   else if (b.c === 'libre' && !sorting) note = '<div class="no ph">Toca para anotar lo que hiciste</div>';
   const trailing = sorting
     ? `<span class="gr" aria-label="Arrastrar para mover">${ICONS.grip}</span>`
@@ -210,7 +211,7 @@ const itemMarkup = (b, { past, current, sorting }) => {
     '<button class="swipe-del" tabindex="-1" aria-hidden="true">Eliminar</button>' +
     `<div class="${classes}"${sorting ? '' : ' tabindex="0"'} style="--dot:${color}">` +
     `<span class="t">${toHHMM(b.s)}</span><span class="pt"><i></i></span>` +
-    `<span class="tx"><div class="ti">${escapeHtml(b.t)}</div><div class="du">hasta las ${toHHMM(b.e)}, ${formatDuration(b.e - b.s)}</div>${itemMeta(b)}${note}</span>` +
+    `<span class="tx"><div class="ti" translate="no">${escapeHtml(b.t)}</div><div class="du">${t('hasta las {0}, {1}', toHHMM(b.e), formatDuration(b.e - b.s))}</div>${itemMeta(b)}${note}</span>` +
     `${trailing}</div></li>`;
 };
 
@@ -234,7 +235,7 @@ export function copyTargetsMarkup({ weeks, sourceKey, selected, todayKey }) {
       const isSource = key === sourceKey;
       const on = selected.has(key);
       return `<button type="button" class="cday${on ? ' sel' : ''}${key === todayKey ? ' today' : ''}" data-key="${key}" aria-pressed="${on}"${isSource ? ' disabled' : ''}` +
-        ` aria-label="${DAY_NAMES[date.getDay()]} ${date.getDate()}${isSource ? ' (día de origen)' : ''}">` +
+        ` aria-label="${DAY_NAMES[date.getDay()]} ${date.getDate()}${isSource ? t(' (día de origen)') : ''}">` +
         `<span class="l">${DAY_LETTERS[date.getDay()]}</span><span class="n">${date.getDate()}</span></button>`;
     }).join('') + '</div></div>'
   )).join('');
@@ -244,13 +245,13 @@ export function templatesMarkup(templates) {
   if (!templates.length) {
     return '<p class="set-s">Aún no tienes plantillas. Organiza un día a tu gusto y guárdalo para reutilizarlo con un toque.</p>';
   }
-  return '<ul class="tpl-list">' + templates.map(t => {
-    const from = Math.min(...t.blocks.map(b => b.s));
-    const to = Math.max(...t.blocks.map(b => b.e));
-    return `<li class="tpl"><div class="tpl-t"><b>${escapeHtml(t.name)}</b>` +
-      `<small>${plural(t.blocks.length, 'actividad', 'actividades')} · ${toHHMM(from)}–${toHHMM(to)}</small></div>` +
-      `<div class="tpl-b"><button class="btn2" data-act="apply" data-id="${escapeHtml(t.id)}">Añadir</button>` +
-      `<button class="btn2 danger" data-act="delete" data-id="${escapeHtml(t.id)}" aria-label="Eliminar ${escapeHtml(t.name)}">Eliminar</button></div></li>`;
+  return '<ul class="tpl-list">' + templates.map(tpl => {
+    const from = Math.min(...tpl.blocks.map(b => b.s));
+    const to = Math.max(...tpl.blocks.map(b => b.e));
+    return `<li class="tpl"><div class="tpl-t"><b translate="no">${escapeHtml(tpl.name)}</b>` +
+      `<small>${plural(tpl.blocks.length, 'actividad', 'actividades')} · ${toHHMM(from)}–${toHHMM(to)}</small></div>` +
+      `<div class="tpl-b"><button class="btn2" data-act="apply" data-id="${escapeHtml(tpl.id)}">Añadir</button>` +
+      `<button class="btn2 danger" data-act="delete" data-id="${escapeHtml(tpl.id)}" aria-label="${t('Eliminar {0}', escapeHtml(tpl.name))}">Eliminar</button></div></li>`;
   }).join('') + '</ul>';
 }
 
@@ -262,9 +263,9 @@ const DOW_ORDER = Object.freeze([1, 2, 3, 4, 5, 6, 0]);   // lunes → domingo
 export function subtasksMarkup(list) {
   return list.map((item, i) => (
     `<li class="sub-row${item.d ? ' done' : ''}" data-i="${i}">` +
-    `<button type="button" class="sub-ck" aria-pressed="${item.d}" aria-label="Marcar «${escapeHtml(item.t)}»"><span class="ring">${ICONS.check}</span></button>` +
-    `<span class="sub-t">${escapeHtml(item.t)}</span>` +
-    `<button type="button" class="sub-x" aria-label="Quitar «${escapeHtml(item.t)}»">×</button></li>`
+    `<button type="button" class="sub-ck" aria-pressed="${item.d}" aria-label="${t('Marcar «{0}»', escapeHtml(item.t))}"><span class="ring">${ICONS.check}</span></button>` +
+    `<span class="sub-t" translate="no">${escapeHtml(item.t)}</span>` +
+    `<button type="button" class="sub-x" aria-label="${t('Quitar «{0}»', escapeHtml(item.t))}">×</button></li>`
   )).join('');
 }
 
@@ -284,16 +285,16 @@ export function repeatsMarkup(rules) {
     return '<p class="set-s">No tienes actividades que se repitan. Al crear o editar una actividad, activa «Repetir cada semana».</p>';
   }
   return '<ul class="tpl-list">' + rules.map(r => (
-    `<li class="tpl"><div class="tpl-t"><b>${escapeHtml(r.t)}</b>` +
+    `<li class="tpl"><div class="tpl-t"><b translate="no">${escapeHtml(r.t)}</b>` +
     `<small>${weekdaysLabel(r.dows)} · ${toHHMM(r.s)}–${toHHMM(r.e)}</small></div>` +
-    `<div class="tpl-b"><button class="btn2 danger" data-act="stop" data-id="${escapeHtml(r.id)}" aria-label="Dejar de repetir ${escapeHtml(r.t)}">Dejar de repetir</button></div></li>`
+    `<div class="tpl-b"><button class="btn2 danger" data-act="stop" data-id="${escapeHtml(r.id)}" aria-label="${t('Dejar de repetir {0}', escapeHtml(r.t))}">Dejar de repetir</button></div></li>`
   )).join('') + '</ul>';
 }
 
 /* ── Editor y estadísticas ── */
 
 export const categoryChipsMarkup = () => CATEGORIES.map(c => (
-  `<button type="button" class="chip" data-c="${c.key}" style="--dot:${c.color}"><i></i>${escapeHtml(categoryName(c.key))}</button>`
+  `<button type="button" class="chip" data-c="${c.key}" style="--dot:${c.color}"><i></i><span translate="no">${escapeHtml(categoryName(c.key))}</span></button>`
 )).join('');
 
 export const weekRangeLabel = dates => `${formatShortDate(dates[0])} – ${formatShortDate(dates[6])}`;
@@ -306,9 +307,9 @@ export function statsMarkup(summary, { empty = 'Sin actividades esta semana.' } 
   if (!rows.length) return `<p class="set-s">${escapeHtml(empty)}</p>`;
   const max = rows[0].planned;
   const total = rows.reduce((t, r) => ({ planned: t.planned + r.planned, done: t.done + r.done }), { planned: 0, done: 0 });
-  return `<div class="stat-total"><b>${formatTotal(total.done)}</b>hechas de ${formatTotal(total.planned)} planificadas</div>` +
+  return `<div class="stat-total"><b>${formatTotal(total.done)}</b>${t('hechas de {0} planificadas', formatTotal(total.planned))}</div>` +
     rows.map(r => `<div class="stat" style="--dot:${r.color}">` +
-      `<div class="stat-h"><span>${escapeHtml(categoryName(r.key))}</span><span>${formatTotal(r.done)} de ${formatTotal(r.planned)}</span></div>` +
+      `<div class="stat-h"><span translate="no">${escapeHtml(categoryName(r.key))}</span><span>${t('{0} de {1}', formatTotal(r.done), formatTotal(r.planned))}</span></div>` +
       `<div class="track"><i class="plan" style="width:${(r.planned / max * 100).toFixed(1)}%"></i><i style="width:${(r.done / max * 100).toFixed(1)}%"></i></div></div>`
     ).join('');
 }
@@ -321,12 +322,12 @@ export const monthNavMarkup = ({ label, canPrev, canNext, isCurrent }) => (
 );
 
 export const monthDaysMarkup = ({ counted, met }) => (counted
-  ? `<p class="set-s month-days"><b>${met}</b> de ${plural(counted, 'día con actividades', 'días con actividades')} cumplieron la meta.</p>`
+  ? `<p class="set-s month-days">${t('{0} de {1} cumplieron la meta.', `<b>${met}</b>`, plural(counted, 'día con actividades', 'días con actividades'))}</p>`
   : '');
 
 /** Aspecto: tema y color de acento. */
-export const themeChipsMarkup = current => THEMES.map(t => (
-  `<button type="button" class="chip${t.key === current ? ' sel' : ''}" data-theme="${t.key}" aria-pressed="${t.key === current}">${t.label}</button>`
+export const themeChipsMarkup = current => THEMES.map(th => (
+  `<button type="button" class="chip${th.key === current ? ' sel' : ''}" data-theme="${th.key}" aria-pressed="${th.key === current}">${th.label}</button>`
 )).join('');
 export const accentSwatchesMarkup = current => ACCENTS.map(a => (
   `<button type="button" class="swatch${a.key === current ? ' sel' : ''}" data-accent="${a.key}" style="--sw:${a.swatch}" aria-pressed="${a.key === current}" aria-label="${a.label}"></button>`
@@ -341,7 +342,7 @@ export const categoriesMarkup = cats => CATEGORIES.map(c => {
   )).join('');
   return `<div class="cat-row"><label class="f"><span>${escapeHtml(c.label)}</span>` +
     `<input type="text" data-cat-name="${c.key}" maxlength="20" value="${escapeHtml(own.l || '')}" placeholder="${escapeHtml(c.label)}" autocomplete="off"></label>` +
-    `<div class="swatches" role="group" aria-label="Color de ${escapeHtml(c.label)}">${swatches}</div></div>`;
+    `<div class="swatches" role="group" aria-label="${t('Color de {0}', escapeHtml(c.label))}">${swatches}</div></div>`;
 }).join('');
 
 /* ═══════════════ Componentes con comportamiento ═══════════════ */

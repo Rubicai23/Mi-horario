@@ -12,6 +12,8 @@ export const STORAGE = Object.freeze({
   settingPrefix: 'cfg:'     // cfg:notify, cfg:analytics
 });
 
+import { isEnglish, t } from './i18n.js';
+
 /* ───────── Límites y reglas de negocio ───────── */
 export const MAX_MIN = 1439;            // 23:59
 export const LIMITS = Object.freeze({
@@ -54,18 +56,18 @@ export const STREAK_RULES = Object.freeze({
  *       week = semanas perfectas (objetivo cumplido todos los días con actividades, mínimo 3 días).
  */
 export const BADGES = Object.freeze([
-  { id: 'primer-paso',    kind: 'done',   target: 1,   icon: 'check', title: 'Primer paso',      desc: 'Completa tu primera actividad.' },
-  { id: 'en-marcha',      kind: 'done',   target: 25,  icon: 'check', title: 'En marcha',        desc: 'Completa 25 actividades.' },
-  { id: 'cien-hechas',    kind: 'done',   target: 100, icon: 'check', title: 'Cien hechas',      desc: 'Completa 100 actividades.' },
-  { id: 'imparable',      kind: 'done',   target: 500, icon: 'check', title: 'Imparable',        desc: 'Completa 500 actividades.' },
-  { id: 'racha-3',        kind: 'streak', target: 3,   icon: 'flame', title: 'Tres seguidos',    desc: 'Racha de 3 días.' },
-  { id: 'racha-7',        kind: 'streak', target: 7,   icon: 'flame', title: 'Semana de fuego',  desc: 'Racha de 7 días.' },
-  { id: 'racha-14',       kind: 'streak', target: 14,  icon: 'flame', title: 'Dos semanas',      desc: 'Racha de 14 días.' },
-  { id: 'racha-30',       kind: 'streak', target: 30,  icon: 'flame', title: 'Mes de hierro',    desc: 'Racha de 30 días.' },
-  { id: 'racha-100',      kind: 'streak', target: 100, icon: 'flame', title: 'Centenario',       desc: 'Racha de 100 días.' },
-  { id: 'dias-10',        kind: 'days',   target: 10,  icon: 'star',  title: 'Buen ritmo',       desc: 'Cumple el objetivo en 10 días.' },
-  { id: 'dias-50',        kind: 'days',   target: 50,  icon: 'star',  title: 'Medio centenar',   desc: 'Cumple el objetivo en 50 días.' },
-  { id: 'semana-perfecta', kind: 'week',  target: 1,   icon: 'star',  title: 'Semana perfecta',  desc: 'Cumple el objetivo todos los días con actividades de una semana (mínimo 3 días).' }
+  { id: 'primer-paso',    kind: 'done',   target: 1,   icon: 'check', title: t('Primer paso'),      desc: t('Completa tu primera actividad.') },
+  { id: 'en-marcha',      kind: 'done',   target: 25,  icon: 'check', title: t('En marcha'),        desc: t('Completa 25 actividades.') },
+  { id: 'cien-hechas',    kind: 'done',   target: 100, icon: 'check', title: t('Cien hechas'),      desc: t('Completa 100 actividades.') },
+  { id: 'imparable',      kind: 'done',   target: 500, icon: 'check', title: t('Imparable'),        desc: t('Completa 500 actividades.') },
+  { id: 'racha-3',        kind: 'streak', target: 3,   icon: 'flame', title: t('Tres seguidos'),    desc: t('Racha de 3 días.') },
+  { id: 'racha-7',        kind: 'streak', target: 7,   icon: 'flame', title: t('Semana de fuego'),  desc: t('Racha de 7 días.') },
+  { id: 'racha-14',       kind: 'streak', target: 14,  icon: 'flame', title: t('Dos semanas'),      desc: t('Racha de 14 días.') },
+  { id: 'racha-30',       kind: 'streak', target: 30,  icon: 'flame', title: t('Mes de hierro'),    desc: t('Racha de 30 días.') },
+  { id: 'racha-100',      kind: 'streak', target: 100, icon: 'flame', title: t('Centenario'),       desc: t('Racha de 100 días.') },
+  { id: 'dias-10',        kind: 'days',   target: 10,  icon: 'star',  title: t('Buen ritmo'),       desc: t('Cumple el objetivo en 10 días.') },
+  { id: 'dias-50',        kind: 'days',   target: 50,  icon: 'star',  title: t('Medio centenar'),   desc: t('Cumple el objetivo en 50 días.') },
+  { id: 'semana-perfecta', kind: 'week',  target: 1,   icon: 'star',  title: t('Semana perfecta'),  desc: t('Cumple el objetivo todos los días con actividades de una semana (mínimo 3 días).') }
 ]);
 
 export const NOTIFICATIONS = Object.freeze({
@@ -76,34 +78,34 @@ export const NOTIFICATIONS = Object.freeze({
 export const BACKUP = Object.freeze({ app: 'mi-horario', version: 1 });
 
 /* ───────── Calendario ───────── */
-export const DAY_NAMES = Object.freeze(['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado']);
-export const DAY_LETTERS = Object.freeze(['D', 'L', 'M', 'X', 'J', 'V', 'S']);
+export const DAY_NAMES = Object.freeze(['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'].map(d => t(d)));
+export const DAY_LETTERS = Object.freeze(isEnglish ? ['S', 'M', 'T', 'W', 'T', 'F', 'S'] : ['D', 'L', 'M', 'X', 'J', 'V', 'S']);
 
 /* ───────── Aspecto (solo de este dispositivo) ───────── */
 export const THEMES = Object.freeze([
-  { key: 'auto', label: 'Automático' },
-  { key: 'light', label: 'Claro' },
-  { key: 'dark', label: 'Oscuro' }
+  { key: 'auto', label: t('Automático') },
+  { key: 'light', label: t('Claro') },
+  { key: 'dark', label: t('Oscuro') }
 ]);
 /** Colores de acento. El color de cada uno está definido en style.css (data-accent). */
 export const ACCENTS = Object.freeze([
-  { key: 'verde', label: 'Verde', swatch: '#3F6B5A' },
-  { key: 'azul', label: 'Azul', swatch: '#3F6A9B' },
-  { key: 'violeta', label: 'Violeta', swatch: '#6D5A9E' },
-  { key: 'ambar', label: 'Ámbar', swatch: '#A9742A' },
-  { key: 'rosa', label: 'Rosa', swatch: '#A9577A' },
-  { key: 'grafito', label: 'Grafito', swatch: '#4B5350' }
+  { key: 'verde', label: t('Verde'), swatch: '#3F6B5A' },
+  { key: 'azul', label: t('Azul'), swatch: '#3F6A9B' },
+  { key: 'violeta', label: t('Violeta'), swatch: '#6D5A9E' },
+  { key: 'ambar', label: t('Ámbar'), swatch: '#A9742A' },
+  { key: 'rosa', label: t('Rosa'), swatch: '#A9577A' },
+  { key: 'grafito', label: t('Grafito'), swatch: '#4B5350' }
 ]);
 export const DEFAULT_ACCENT = 'verde';
 
 /* ───────── Categorías ───────── */
 export const CATEGORIES = Object.freeze([
-  { key: 'clase',   label: 'Clase',    color: 'var(--c-clase)' },
-  { key: 'gym',     label: 'Gimnasio', color: 'var(--c-gym)' },
-  { key: 'estudio', label: 'Estudio',  color: 'var(--c-estudio)' },
-  { key: 'ingles',  label: 'Inglés',   color: 'var(--c-ingles)' },
-  { key: 'libre',   label: 'Libre',    color: 'var(--c-libre)' },
-  { key: 'rutina',  label: 'Rutina',   color: 'var(--c-rutina)' }
+  { key: 'clase',   label: t('Clase'),    color: 'var(--c-clase)' },
+  { key: 'gym',     label: t('Gimnasio'), color: 'var(--c-gym)' },
+  { key: 'estudio', label: t('Estudio'),  color: 'var(--c-estudio)' },
+  { key: 'ingles',  label: t('Inglés'),   color: 'var(--c-ingles)' },
+  { key: 'libre',   label: t('Libre'),    color: 'var(--c-libre)' },
+  { key: 'rutina',  label: t('Rutina'),   color: 'var(--c-rutina)' }
 ].map(Object.freeze));
 
 /* ───────── Plantillas para el onboarding ─────────
@@ -169,10 +171,10 @@ const SAMPLE_WEEK = [null, MON_TUE, MON_TUE, WED_THU, WED_THU, FRIDAY, null];
  * `quick`: se ofrece también como atajo cuando el día ya tiene actividades.
  */
 export const PRESETS = Object.freeze([
-  Object.freeze({ id: 'morning', quick: true, icon: 'sun', label: 'Rutina de mañana', title: 'Añadir rutina de mañana', rows: () => MORNING }),
-  Object.freeze({ id: 'focus', quick: true, icon: 'book', label: 'Jornada de estudio/trabajo', title: 'Añadir jornada de estudio/trabajo', rows: () => FOCUS_DAY }),
-  Object.freeze({ id: 'sample-dam', quick: false, icon: 'cap', label: 'Horario DAM de ejemplo', title: 'Usar el horario DAM de ejemplo', rows: dow => SAMPLE_WEEK[dow] })
-]);
+  Object.freeze({ id: 'morning', quick: true, icon: 'sun', label: t('Rutina de mañana'), title: t('Añadir rutina de mañana'), rows: () => MORNING }),
+  Object.freeze({ id: 'focus', quick: true, icon: 'book', label: t('Jornada de estudio/trabajo'), title: t('Añadir jornada de estudio/trabajo'), rows: () => FOCUS_DAY }),
+  Object.freeze({ id: 'sample-dam', quick: false, icon: 'cap', label: t('Horario DAM de ejemplo'), title: t('Usar el horario DAM de ejemplo'), rows: dow => SAMPLE_WEEK[dow] })
+].filter(p => !(isEnglish && p.id === 'sample-dam'))); // el horario de ejemplo (DAM) solo existe en español
 
 /** Colores que se pueden elegir para una categoría (se guarda solo el nombre, nunca un color libre). */
 export const DEFAULT_CATEGORY_COLOR = Object.freeze({

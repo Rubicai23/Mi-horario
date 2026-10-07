@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Privacy and terms · Mi horario</title>
+  <style>
+    :root { --bg: #F2F3F0; --surface: #fff; --ink: #1B1F1D; --muted: #636a66; --line: #E2E4DF; --accent: #3F6B5A; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #121413; --surface: #1A1D1B; --ink: #ECEFEC; --muted: #9aa19d; --line: #272B29; --accent: #8DBFA9; }
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    main { max-width: 720px; margin: 0 auto; padding: 24px 20px 64px; }
+    a { color: var(--accent); }
+    h1 { font-size: 26px; margin: 8px 0 4px; letter-spacing: -0.01em; }
+    h2 { font-size: 20px; margin: 40px 0 8px; scroll-margin-top: 16px; }
+    h3 { font-size: 16px; margin: 24px 0 4px; }
+    p, li { color: var(--ink); }
+    li { margin: 4px 0; }
+    .muted { color: var(--muted); font-size: 14px; }
+    .card { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 4px 20px 20px; margin-top: 16px; }
+    nav { display: flex; gap: 16px; flex-wrap: wrap; margin: 12px 0 0; }
+  </style>
+</head>
+<body>
+<main>
+  <p><a href="./">← Back to Mi horario</a> · <a href="privacidad.html">Español</a></p>
+  <h1>Privacy and terms</h1>
+  <p class="muted">Last updated: October 2026. This text is a plain-language explanation of how the app works; it is not legal advice.</p>
+  <nav><a href="#privacy">Privacy policy</a><a href="#terms">Terms of use</a></nav>
+
+  <!--
+    BEFORE PUBLISHING THE APP IN A STORE: add your contact email here as the data controller, for example:
+    <p><b>Controller and contact:</b> your name · you@example.com</p>
+  -->
+
+  <section class="card" id="privacy">
+    <h2>Privacy policy</h2>
+
+    <h3>1. What data is stored</h3>
+    <ul>
+      <li><b>Your account:</b> the email address and password you sign up with. The password is handled by Firebase Authentication (Google) and nobody, including the person who makes the app, can see it.</li>
+      <li><b>Your schedule:</b> your activities (title, times, category, notes and subtasks), the templates and repeats you create, your rest days, your streak settings, your badges and the names and colours you choose for categories. They are stored in Cloud Firestore, under your account.</li>
+      <li><b>On this device:</b> a copy of your schedule so the app works offline, and device-specific settings (theme, colour, alerts, language).</li>
+    </ul>
+
+    <h3>2. What it is used for</h3>
+    <p>Only to make the app work: showing your schedule, syncing it between your devices and alerting you about your activities. There is no advertising, your data is not sold or handed over, and no profiles are built.</p>
+
+    <h3>3. Usage statistics (optional)</h3>
+    <p>If you turn it on in Settings, the app sends generic, anonymous events to Google Analytics (for example, “the statistics screen was opened”). Titles, notes or the content of your schedule are never sent. It is off until you accept and you can change it whenever you want.</p>
+
+    <h3>4. Who it is shared with</h3>
+    <p>Data is stored with Google (Firebase), which acts as an infrastructure provider. Its servers may be in different countries and Google applies its own security and international transfer safeguards. It is not shared with anyone else.</p>
+
+    <h3>5. Security</h3>
+    <p>Communication is encrypted (HTTPS) and the database rules only let each person read and write their own data.</p>
+
+    <h3>6. How long it is kept</h3>
+    <p>For as long as you have the account. When you delete it, your account and all your cloud data are erased and the device is cleared. The provider’s internal backups may keep them for a limited time until they are purged.</p>
+
+    <h3>7. Your rights</h3>
+    <ul>
+      <li><b>Access and take your data:</b> Settings → Backup → Export.</li>
+      <li><b>Correct:</b> by editing your activities and settings.</li>
+      <li><b>Delete:</b> Settings → Account → Delete account. It is immediate and cannot be undone.</li>
+      <li><b>Withdraw consent for statistics:</b> Settings → Usage statistics.</li>
+    </ul>
+    <p>If you believe your data is not being handled properly, you can complain to the data protection authority of your country (in Spain, the Spanish Data Protection Agency, <a href="https://www.aepd.es" target="_blank" rel="noopener">aepd.es</a>).</p>
+
+    <h3>8. Minors</h3>
+    <p>The app is not intended for children under 14. If you are under that age, you need permission from a parent or guardian to create an account.</p>
+
+    <h3>9. Changes</h3>
+    <p>If this text changes significantly, the date above will be updated.</p>
+  </section>
+
+  <section class="card" id="terms">
+    <h2>Terms of use</h2>
+
+    <h3>1. What Mi horario is</h3>
+    <p>An app to plan your day, tick off what you do and keep a streak. It is for personal use and free.</p>
+
+    <h3>2. Your account</h3>
+    <p>You are responsible for keeping your password safe and for what happens with your account. You can delete it at any time from Settings.</p>
+
+    <h3>3. Your content</h3>
+    <p>What you write is yours. It is only used to show it to you, as explained in the privacy policy. Do not store in the app information you do not want in the cloud, such as passwords or bank details.</p>
+
+    <h3>4. Proper use</h3>
+    <p>Do not use the app for anything illegal, or try to access other people’s data, damage the service or bypass its protections.</p>
+
+    <h3>5. No warranties</h3>
+    <p>The app is offered “as is”, with no guarantee that it will always work or be error-free. Alerts depend on your device’s system and may be delayed or not arrive. Do not use the app as your only reminder for important things (medication, medical appointments, flights…). Back up what matters to you with the Export option.</p>
+
+    <h3>6. Changes and end of service</h3>
+    <p>The app may change, and the service may be suspended or end. If that happens, we will try to give notice in good time so you can export your data.</p>
+
+    <h3>7. Governing law</h3>
+    <p>These terms are governed by Spanish law.</p>
+  </section>
+
+  <p class="muted" style="margin-top:24px"><a href="./">← Back to Mi horario</a></p>
+</main>
+</body>
+</html>

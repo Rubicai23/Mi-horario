@@ -14,9 +14,13 @@ import {
 } from './state-manager.js';
 import { createCloudService } from './firebase-service.js';
 import {
-  createInstallPrompt, createNotifier, deliverFile, isNative, platformInfo, readFileAsText, registerServiceWorker
+  createInstallPrompt, createNotifier, deliverFile, isNative, platformInfo, readFileAsText, registerServiceWorker, shareText
 } from './platform.js';
 import * as ui from './ui-components.js';
+import { LANG, LOCALE, isEnglish, startTranslator, t } from './i18n.js';
+import { setupMenuAndPomodoro } from './pomodoro-ui.js';
+import { setupTour } from './tour.js';
+import { buildShareText } from './summary.js';
 import {
   addDays, dateForDow, formatLongDate, fromHHMM, minutesOfDay, plural, shortTitle, toDateKey, toHHMM, weekDates
 } from './utils.js';
@@ -59,6 +63,8 @@ function createContext() {
     templatesSheet: sheets.register($('sheetTemplates')),
     repeatsSheet: sheets.register($('sheetRepeats')),
     badgesSheet: sheets.register($('sheetBadges')),
+    menuSheet: sheets.register($('sheetMenu')),
+    pomodoroSheet: sheets.register($('sheetPomodoro')),
     catsSheet: sheets.register($('sheetCats')),
     deleteSheet: sheets.register($('sheetDelete')),
     view: { selectedDow: clock().getDay(), weekOffset: 0, sorting: false, dateKey: toDateKey(clock()), minuteKey: '', stale: false },
@@ -68,6 +74,9 @@ function createContext() {
     profileMigrated: false, // ídem para el perfil (plantillas propias)
     busy: () => false,      // lo sustituye setupList: true mientras hay un gesto en curso
     swipeReset: () => {},   // lo sustituye setupList: cierra la fila abierta
+    pomodoroTick: () => {}, // lo sustituye setupMenuAndPomodoro
+    openTour: () => {},     // lo sustituye setupTour
+    maybeShowTour: () => {},
     render: () => {},       // lo sustituye createRenderer
     requestRender: () => {}
   };
@@ -210,7 +219,7 @@ function applyPreset(ctx, presetId) {
   const result = ctx.state.applyPreset(key, presetId);
   if (!result.ok) { ctx.toast.show(result.error, { duration: 6000 }); return; }
   ctx.cloud.track('preset_added', { preset: presetId });
-  const skipped = result.skipped.length ? ` (${result.skipped.length} omitidas por solaparse)` : '';
+  const skipped = result.skipped.length ? t(' ({0} omitidas por solaparse)', result.skipped.length) : '';
   ctx.toast.show(`${plural(result.added, 'actividad añadida', 'actividades añadidas')}${skipped}`, {
     label: 'Deshacer',
     onAction: () => (previous.length ? ctx.state.restoreDay(key, previous) : ctx.state.clearDay(key))
@@ -227,17 +236,18 @@ function toggleDone(ctx, key, id) {
   if (!result.ok) return;
   const fresh = result.done ? ctx.state.checkBadges(ctx.clock()) : [];
   if (fresh.length) ctx.cloud.track('badge_earned', { count: fresh.length });
-  const badgeText = fresh.length === 1 ? ` Insignia nueva: ${fresh[0].title}.` : fresh.length ? ` ${fresh.length} insignias nuevas.` : '';
+  const badgeText = fresh.length === 1 ? t(' Insignia nueva: {0}.', fresh[0].title) : fresh.length ? t(' {0} insignias nuevas.', fresh.length) : '';
+  const badgeOnly = fresh.length === 1 ? ` ${fresh[0].title}.` : fresh.length ? ` ${fresh.length} ${t('insignias nuevas')}.` : '';
   const seeBadges = fresh.length ? { label: 'Ver', onAction: () => openBadges(ctx) } : {};
   const reachedGoal = result.done && !result.before.met && result.after.met;
   if (reachedGoal && key === toDateKey(ctx.clock())) {
     const { current } = ctx.state.streakView();
     vibrate(30);
     ctx.cloud.track('daily_goal_met', { streak: current });
-    ctx.toast.show(`¡Objetivo de hoy cumplido! Racha: ${plural(current, 'día', 'días')}.${badgeText}`, { duration: 6000, ...seeBadges });
+    ctx.toast.show(t('¡Objetivo de hoy cumplido! Racha: {0}.{1}', plural(current, 'día', 'días'), badgeText), { duration: 6000, ...seeBadges });
   } else if (fresh.length) {
     vibrate(30);
-    ctx.toast.show(`¡Insignia conseguida!${badgeText.replace(' Insignia nueva:', '')}`, { duration: 6000, ...seeBadges });
+    ctx.toast.show(t('¡Insignia conseguida!{0}', badgeOnly), { duration: 6000, ...seeBadges });
   } else if (result.done) {
     ctx.cloud.track('activity_done');
   }
@@ -335,8 +345,8 @@ function refreshOverlapWarning(ctx) {
   $('fWarn').hidden = !others.length;
   $('saveBtn').textContent = others.length ? 'Guardar igualmente' : 'Guardar';
   if (!others.length) return;
-  const named = others.slice(0, 2).map(b => `«${shortTitle(b.t)}» (${toHHMM(b.s)}–${toHHMM(b.e)})`).join(' y ');
-  $('fWarn').textContent = `Se solapa con ${named}${others.length > 2 ? ` y ${others.length - 2} más` : ''}.`;
+  const named = others.slice(0, 2).map(b => `«${shortTitle(b.t)}» (${toHHMM(b.s)}–${toHHMM(b.e)})`).join(t(' y '));
+  $('fWarn').textContent = t('Se solapa con {0}.', `${named}${others.length > 2 ? t(' y {0} más', others.length - 2) : ''}`);
 }
 
 function renderSubtasks() {
@@ -608,8 +618,8 @@ function setupDayMenu(ctx) {
     if (!result.ok) { showCopyError(result.error); return; }
     ctx.cloud.track('day_copied', { days: result.days });
     ctx.copySheet.close();
-    const skipped = result.skipped ? ` (${plural(result.skipped, 'omitida', 'omitidas')} por solaparse)` : '';
-    toast.show(`Copiado a ${plural(result.days, 'día', 'días')}${skipped}`, {
+    const skipped = result.skipped ? t(' ({0} por solaparse)', plural(result.skipped, 'omitida', 'omitidas')) : '';
+    toast.show(t('Copiado a {0}{1}', plural(result.days, 'día', 'días'), skipped), {
       label: 'Deshacer',
       duration: 7000,
       onAction: () => state.undoCopy(result.previous)
@@ -695,6 +705,7 @@ function setupStats(ctx) {
     $('statsTabMonth').setAttribute('aria-selected', String(month));
     $('statsNav').hidden = !month;
     $('statsRange').hidden = month;
+    $('shareRow').hidden = month || !ctx.state.settings.getFlag('share');
     if (!month) {
       $('sgTitle').textContent = 'Esta semana';
       $('statsRange').textContent = ui.weekRangeLabel(weekDates(now));
@@ -702,7 +713,7 @@ function setupStats(ctx) {
       return;
     }
     const result = ctx.state.monthSummary(now, stats.month);
-    const name = new Date(result.year, result.month, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+    const name = new Date(result.year, result.month, 1).toLocaleDateString(LOCALE, { month: 'long', year: 'numeric' });
     const label = name.charAt(0).toUpperCase() + name.slice(1);
     $('sgTitle').textContent = stats.month === 0 ? 'Este mes' : label;
     $('statsNav').innerHTML = ui.monthNavMarkup({
@@ -727,6 +738,18 @@ function setupStats(ctx) {
     if (!button || button.disabled) return;
     stats.month += button.id === 'statsPrev' ? -1 : 1;
     paint();
+  });
+  $('shareStats').addEventListener('click', async () => {
+    const now = ctx.clock();
+    const text = buildShareText({
+      summary: ctx.state.weekSummary(now), range: ui.weekRangeLabel(weekDates(now)), streak: ctx.state.streakView(now).current,
+      categories: CATEGORIES, nameOf: ui.categoryName
+    });
+    try {
+      const result = await shareText(text);
+      if (result === 'copied') ctx.toast.show('Resumen copiado. Pégalo donde quieras.');
+      ctx.cloud.track('share_summary');
+    } catch (_) { ctx.toast.show('No se pudo compartir el resumen.', { duration: 5000 }); }
   });
   $('closeStats').addEventListener('click', ctx.statsSheet.close);
 }
@@ -837,6 +860,11 @@ function setupSettings(ctx) {
     $('analyticsSwitch').setAttribute('aria-checked', a.on);
     $('analyticsSwitch').disabled = a.disabled;
     $('analyticsStatus').textContent = a.text;
+    const sharing = state.settings.getFlag('share');
+    $('shareSwitch').setAttribute('aria-checked', sharing);
+    $('shareStatus').textContent = sharing
+      ? 'Aparece un botón en Estadísticas para enviar un texto con tus totales por categoría y tu racha. Nunca incluye los títulos de tus actividades.'
+      : 'Desactivado. Si lo activas, podrás enviar un resumen de tu semana desde Estadísticas.';
 
     const iosHint = platformInfo.ios && !platformInfo.standalone && !ctx.native;
     $('installBlock').hidden = !(install.available() || iosHint);
@@ -905,6 +933,15 @@ function setupSettings(ctx) {
     ctx.syncNative();
   });
 
+  $('langSelect').value = LANG;
+  $('langSelect').addEventListener('change', e => {
+    state.settings.set('lang', e.target.value === 'en' ? 'en' : 'es');
+    location.reload();
+  });
+  $('shareSwitch').addEventListener('click', () => {
+    state.settings.setFlag('share', !state.settings.getFlag('share'));
+    refreshSettings();
+  });
   $('analyticsSwitch').addEventListener('click', () => {
     state.settings.setFlag('analytics', !state.settings.getFlag('analytics'));
     ctx.applyAnalyticsPreference();
@@ -932,7 +969,7 @@ function setupSettings(ctx) {
     try {
       const text = await readFileAsText(file);
       const count = parseBackup(text).days.length;
-      if (!window.confirm(`Se restaurarán ${plural(count, 'día', 'días')} y se sobrescribirán los que ya existan. ¿Continuar?`)) return;
+      if (!window.confirm(t('Se restaurarán {0} y se sobrescribirán los que ya existan. ¿Continuar?', plural(count, 'día', 'días')))) return;
       state.importBackup(text);
       cloud.track('backup_imported');
       ctx.settingsSheet.close();
@@ -962,7 +999,7 @@ function refreshGate(ctx) {
   const gated = isGated(ctx);
   $('gate').hidden = !gated;
   $('app').hidden = gated;
-  if (gated) ctx.sheets.closeActive();
+  if (gated) ctx.sheets.closeActive(); else ctx.maybeShowTour();
   $('gateMsg').textContent = location.protocol === 'file:' && ctx.account.status !== 'loading'
     ? 'Abierta como archivo, no se puede iniciar sesión. Ábrela desde una dirección https:// o http://localhost.'
     : (GATE_TEXT[ctx.account.status] || '');
@@ -1151,6 +1188,7 @@ function setupClock(ctx) {
     const dateKey = toDateKey(now);
     if (dateKey !== view.dateKey) { view.dateKey = dateKey; view.selectedDow = now.getDay(); view.weekOffset = 0; force = true; }
     checkStarts(now, false);
+    ctx.pomodoroTick();
     if (ctx.busy()) return; // no repintar durante un gesto; se hará al terminar
     const minuteKey = `${dateKey}-${now.getHours()}:${now.getMinutes()}`;
     if (force || view.stale || minuteKey !== view.minuteKey) { view.minuteKey = minuteKey; ctx.render(now); }
@@ -1189,6 +1227,12 @@ function setupBadges(ctx) {
 }
 
 function main() {
+  if (isEnglish) {
+    document.querySelectorAll('a[href^="privacidad.html"]').forEach(a => {
+      a.setAttribute('href', a.getAttribute('href').replace('privacidad.html#privacidad', 'privacy-en.html#privacy').replace('privacidad.html#terminos', 'privacy-en.html#terms'));
+    });
+    startTranslator();
+  }
   const ctx = createContext();
   applyAppearance(ctx);
   createRenderer(ctx);
@@ -1197,6 +1241,8 @@ function main() {
   setupEditor(ctx);
   setupDayMenu(ctx);
   setupBadges(ctx);
+  setupTour(ctx);
+  setupMenuAndPomodoro(ctx, { openBadges: () => openBadges(ctx), openTour: () => ctx.openTour() });
   setupCategories(ctx);
   setupStats(ctx);
   setupSettings(ctx);

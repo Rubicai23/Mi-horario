@@ -5,9 +5,13 @@
  * Los plugins de Capacitor se cargan bajo demanda (import dinámico) y solo en dispositivos nativos.
  */
 import { Capacitor } from '@capacitor/core';
+import { t } from './i18n.js';
 import { hashToInt, shortTitle, toHHMM } from './utils.js';
 
 export const isNative = () => Capacitor.isNativePlatform();
+
+/** Identificador fijo de la notificación nativa del Pomodoro (la reprogramación de actividades no la toca). */
+export const POMO_ID = 2147483000;
 
 export const platformInfo = (() => {
   const ua = navigator.userAgent || '';
@@ -45,8 +49,8 @@ export function createInstallPrompt(onChange) {
 
 /** Título del aviso: "¡Toca Inglés!" al empezar, o "En 10 min: Inglés" con antelación. */
 export const reminderTitle = (block, lead = 0) => (lead > 0
-  ? `En ${lead} min: ${shortTitle(block.t)}`
-  : `¡Toca ${shortTitle(block.t)}!`);
+  ? t('En {0} min: {1}', lead, shortTitle(block.t))
+  : t('¡Toca {0}!', shortTitle(block.t)));
 
 /* ───────── Notificaciones ─────────
  * Web:    se avisa mientras la app está abierta o recién pasada a segundo plano (limitación del navegador).
@@ -83,7 +87,7 @@ export function createNotifier({ settings, getRegistration }) {
   });
 
   const cancelAllPending = async () => {
-    const notifications = (await (await plugin()).getPending()).notifications;
+    const notifications = (await (await plugin()).getPending()).notifications.filter(({ id }) => id !== POMO_ID);
     if (notifications.length) await (await plugin()).cancel({ notifications: notifications.map(({ id }) => ({ id })) });
   };
 
@@ -131,6 +135,29 @@ export function createNotifier({ settings, getRegistration }) {
       } catch (_) { /* algunos navegadores bloquean el constructor */ }
     },
 
+    /** Pomodoro, web: aviso de fin de fase (solo si los avisos están activados). */
+    async announcePomodoro(title, body) {
+      if (native || !status().enabled) return;
+      const options = { body, tag: 'pomodoro', icon: 'icons/icon-192.png', badge: 'icons/icon-192.png' };
+      try {
+        const registration = await getRegistration();
+        if (registration && registration.showNotification) await registration.showNotification(title, options);
+        else new Notification(title, options);
+      } catch (_) { /* nada */ }
+    },
+
+    /** Pomodoro, nativo: programa (o cancela con `at = null`) el aviso del fin de fase, que suena con la app cerrada. */
+    schedulePomodoro(at, title, body) {
+      if (!native) return Promise.resolve();
+      queue = queue.then(async () => {
+        const lib = await plugin();
+        await lib.cancel({ notifications: [{ id: POMO_ID }] });
+        if (!at || !status().enabled) return;
+        await lib.schedule({ notifications: [{ id: POMO_ID, title, body, schedule: { at, allowWhileIdle: true } }] });
+      }).catch(() => {});
+      return queue;
+    },
+
     /** Nativo: reprograma los próximos avisos. `upcoming` = [{ key, block, at, lead }] (`at` = cuándo suena). */
     sync(upcoming) {
       if (!native) return Promise.resolve();
@@ -158,7 +185,7 @@ export function createNotifier({ settings, getRegistration }) {
 export async function deliverFile(file) {
   if (isNative()) return deliverFileNative(file);
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], title: 'Copia de Mi horario' }); return 'shared'; } catch (err) {
+    try { await navigator.share({ files: [file], title: t('Copia de Mi horario') }); return 'shared'; } catch (err) {
       if (err && err.name === 'AbortError') return 'cancelled';
     }
   }
@@ -183,7 +210,7 @@ async function deliverFileNative(file) {
     path: file.name, data: await file.text(), directory: Directory.Cache, encoding: Encoding.UTF8
   });
   try {
-    await Share.share({ title: 'Copia de Mi horario', url: uri, dialogTitle: 'Guardar copia' });
+    await Share.share({ title: t('Copia de Mi horario'), url: uri, dialogTitle: t('Guardar copia') });
     return 'shared';
   } catch (err) {
     if (/cancel/i.test(String(err && (err.message || err)))) return 'cancelled';
@@ -195,6 +222,24 @@ async function deliverFileNative(file) {
 export const readFileAsText = file => new Promise((resolve, reject) => {
   const reader = new FileReader();
   reader.onload = () => resolve(String(reader.result));
-  reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+  reader.onerror = () => reject(new Error(t('No se pudo leer el archivo.')));
   reader.readAsText(file);
 });
+
+/** Comparte un texto: hoja nativa de compartir, Web Share o, si no hay, el portapapeles. Devuelve 'shared' | 'copied' | 'cancelled'. */
+export async function shareText(text, title = t('Mi semana')) {
+  if (isNative()) {
+    const { Share } = await import('@capacitor/share');
+    try { await Share.share({ title, text, dialogTitle: title }); return 'shared'; } catch (err) {
+      if (/cancel/i.test(String(err && (err.message || err)))) return 'cancelled';
+      throw err;
+    }
+  }
+  if (navigator.share) {
+    try { await navigator.share({ title, text }); return 'shared'; } catch (err) {
+      if (err && err.name === 'AbortError') return 'cancelled';
+    }
+  }
+  await navigator.clipboard.writeText(text);
+  return 'copied';
+}
