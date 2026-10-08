@@ -24,6 +24,17 @@ self.addEventListener('activate', event => {
   );
 });
 
+/* Avisos con la app cerrada: la nube envía un mensaje de datos y aquí se muestra la notificación.
+ * (En iPhone todo mensaje push debe mostrar una notificación, por eso siempre se muestra alguna.) */
+self.addEventListener('push', event => {
+  let data = {};
+  try { const payload = event.data ? event.data.json() : {}; data = payload.data || payload || {}; } catch (_) { data = {}; }
+  const title = data.title || 'Mi horario';
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '', tag: data.tag || undefined, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png'
+  }));
+});
+
 self.addEventListener('fetch', event => {
   const { request } = event;
   if (request.method !== 'GET') return;

@@ -28,7 +28,9 @@ export const LIMITS = Object.freeze({
   restDays: 400,                        // debe coincidir con firestore.rules
   badges: 40,                           // debe coincidir con firestore.rules
   categories: 6,                        // debe coincidir con firestore.rules (un ajuste por categoría)
-  categoryLabel: 20
+  categoryLabel: 20,
+  tags: 12,                             // debe coincidir con firestore.rules
+  tagName: 24
 });
 
 /** Meses que se pueden recorrer en las estadísticas (hacia atrás y hacia delante desde el actual). */
@@ -74,6 +76,10 @@ export const NOTIFICATIONS = Object.freeze({
   nativeHorizonDays: 7,     // días por delante que se programan en Android/iOS
   nativeMaxPending: 60      // iOS admite 64 notificaciones locales pendientes
 });
+
+/** Avisos con la app cerrada (Web Push vía Firebase Cloud Messaging). Vacío = función oculta.
+ *  Se rellena con la clave de Firebase → Configuración → Cloud Messaging → Certificados push web → "Par de claves". */
+export const PUSH = Object.freeze({ vapidKey: '', horizonDays: 3, maxItems: 40 });
 
 export const BACKUP = Object.freeze({ app: 'mi-horario', version: 1 });
 

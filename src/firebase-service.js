@@ -15,7 +15,7 @@ import {
   signOut
 } from 'firebase/auth';
 import {
-  collection, deleteDoc, doc, getDocsFromServer, initializeFirestore, memoryLocalCache, onSnapshot, persistentLocalCache,
+  arrayUnion, collection, deleteDoc, doc, getDocsFromServer, initializeFirestore, memoryLocalCache, onSnapshot, persistentLocalCache,
   persistentMultipleTabManager, persistentSingleTabManager, serverTimestamp, setDoc, writeBatch
 } from 'firebase/firestore';
 
@@ -184,7 +184,7 @@ export function createCloudService({ config, native = false }) {
       try {
         stopListeners();
         const snapshot = await getDocsFromServer(collection(db, 'users', uid, 'days'));
-        const refs = snapshot.docs.map(d => d.ref).concat(profileRef(uid));
+        const refs = snapshot.docs.map(d => d.ref).concat(profileRef(uid), doc(db, 'pushQueue', uid));
         for (let i = 0; i < refs.length; i += 400) {
           const batch = writeBatch(db);
           refs.slice(i, i + 400).forEach(ref => batch.delete(ref));
@@ -229,6 +229,7 @@ export function createCloudService({ config, native = false }) {
           streak: JSON.parse(JSON.stringify(profile.streak || { goal: 80, days: [0, 1, 2, 3, 4, 5, 6] })),
           badges: JSON.parse(JSON.stringify(profile.badges || {})),
           cats: JSON.parse(JSON.stringify(profile.cats || {})),
+          tags: JSON.parse(JSON.stringify(profile.tags || [])),
           updatedAt: serverTimestamp()
         });
         return true;
@@ -236,6 +237,30 @@ export function createCloudService({ config, native = false }) {
         handlers.error(error);
         return false;
       }
+    },
+    /* ── Avisos con la app cerrada (Web Push). Solo si el usuario los activa. ── */
+    async enablePush(vapidKey, registration) {
+      if (!app || !user) throw new Error('No hay una sesión iniciada.');
+      const messaging = await import('firebase/messaging');
+      if (!(await messaging.isSupported())) throw Object.assign(new Error('unsupported'), { code: 'push/unsupported' });
+      const token = await messaging.getToken(messaging.getMessaging(app), { vapidKey, serviceWorkerRegistration: registration });
+      if (!token) throw Object.assign(new Error('no-token'), { code: 'push/no-token' });
+      await setDoc(doc(db, 'pushQueue', user.uid), { tokens: arrayUnion(token), updatedAt: serverTimestamp() }, { merge: true });
+      return token;
+    },
+    /** Guarda los próximos avisos [{at, t, b}] para que la función de la nube los envíe a su hora. */
+    async pushSchedule(items) {
+      if (!db || !user) return false;
+      try {
+        const data = { items, updatedAt: serverTimestamp() };
+        data.nextAt = items.length ? Math.min(...items.map(i => i.at)) : 0;
+        await setDoc(doc(db, 'pushQueue', user.uid), data, { merge: true });
+        return true;
+      } catch (error) { handlers.error(error); return false; }
+    },
+    async disablePush() {
+      if (!db || !user) return false;
+      try { await deleteDoc(doc(db, 'pushQueue', user.uid)); return true; } catch (error) { handlers.error(error); return false; }
     },
     async removeDay(key) {
       if (!db || !user) return false;

@@ -30,3 +30,11 @@ export function buildShareText({ summary, range, streak = 0, categories, nameOf 
   if (streak > 0) lines.push(`Racha: ${streak} ${streak === 1 ? 'día' : 'días'} 🔥`);
   return lines.join('\n');
 }
+
+/**
+ * ¿Toca mostrar el resumen de la semana pasada? Solo si el usuario lo activó, aún no se mostró esta semana
+ * y la semana anterior tuvo actividades. `seen` es la fecha del lunes de la semana en que se mostró (o se activó).
+ */
+export function weeklyDue({ enabled, seen, thisMonday, hadActivities }) {
+  return Boolean(enabled && hadActivities && seen !== thisMonday);
+}

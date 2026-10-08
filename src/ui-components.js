@@ -16,6 +16,11 @@ export const $ = id => document.getElementById(id);
 /** Nombres propios de las categorías (los define el usuario; si falta uno se usa el original). */
 let categoryNames = {};
 export const setCategoryNames = map => { categoryNames = { ...map }; };
+/** Nombres de las etiquetas (id → nombre), los pone la app desde el perfil. */
+let tagNames = {};
+export const setTagNames = map => { tagNames = { ...map }; };
+export const tagLabel = id => tagNames[id] || '';
+
 export const categoryName = key => categoryNames[key] || (CATEGORIES.find(c => c.key === key) || {}).label || key;
 
 const CATEGORY_BY_KEY = Object.freeze(Object.fromEntries(CATEGORIES.map(c => [c.key, c])));
@@ -195,6 +200,7 @@ export function quickAddMarkup(presets) {
 const itemMeta = b => {
   const parts = [];
   if (b.r) parts.push(`<span class="mt">${ICONS.repeat}${t('Cada semana')}</span>`);
+  if (b.g && tagLabel(b.g)) parts.push(`<span class="mt tag" translate="no">#${escapeHtml(tagLabel(b.g))}</span>`);
   if (b.k && b.k.length) parts.push(`<span class="mt">${t('{0}/{1} subtareas', b.k.filter(item => item.d).length, b.k.length)}</span>`);
   return parts.length ? `<div class="meta">${parts.join('')}</div>` : '';
 };
@@ -313,6 +319,34 @@ export function statsMarkup(summary, { empty = 'Sin actividades esta semana.' } 
       `<div class="stat-h"><span translate="no">${escapeHtml(categoryName(r.key))}</span><span>${t('{0} de {1}', formatTotal(r.done), formatTotal(r.planned))}</span></div>` +
       `<div class="track"><i class="plan" style="width:${(r.planned / max * 100).toFixed(1)}%"></i><i style="width:${(r.done / max * 100).toFixed(1)}%"></i></div></div>`
     ).join('');
+}
+
+/** Selector de etiqueta del editor: «Sin etiqueta» y las propias. */
+export const tagChipsMarkup = (tags, selected) => [{ id: '', name: t('Sin etiqueta') }, ...tags].map(tag => (
+  `<button type="button" class="chip${tag.id === selected ? ' sel' : ''}" data-g="${escapeHtml(tag.id)}" aria-pressed="${tag.id === selected}">` +
+  `${tag.id ? `<span translate="no">${escapeHtml(tag.name)}</span>` : escapeHtml(tag.name)}</button>`
+)).join('');
+
+/** Lista para gestionar etiquetas: nombre editable y botón de eliminar. */
+export const tagManagerMarkup = tags => (tags.length
+  ? '<ul class="tpl-list">' + tags.map(tag => (
+    `<li class="tpl"><label class="f tag-edit"><span class="sr">${escapeHtml(t('Nombre de la etiqueta'))}</span>` +
+    `<input type="text" data-tag-name="${escapeHtml(tag.id)}" maxlength="24" value="${escapeHtml(tag.name)}" autocomplete="off" translate="no"></label>` +
+    `<div class="tpl-b"><button class="btn2 danger" data-act="delete-tag" data-id="${escapeHtml(tag.id)}" aria-label="${t('Eliminar {0}', escapeHtml(tag.name))}">${t('Eliminar')}</button></div></li>`
+  )).join('') + '</ul>'
+  : `<p class="set-s">${t('Aún no tienes etiquetas.')}</p>`);
+
+/** Tiempo por etiqueta en Estadísticas (solo si hay alguna con actividades). */
+export function tagStatsMarkup(summary, tags) {
+  const rows = tags.map(tag => ({ ...tag, planned: (summary[tag.id] || {}).planned || 0, done: (summary[tag.id] || {}).done || 0 }))
+    .filter(r => r.planned > 0).sort((a, b) => b.planned - a.planned);
+  if (!rows.length) return '';
+  const max = rows[0].planned;
+  return `<div class="set-t stats-sub">${t('Por etiqueta')}</div>` + rows.map(r => (
+    `<div class="stat" style="--dot:var(--accent)"><div class="stat-h"><span translate="no">#${escapeHtml(r.name)}</span>` +
+    `<span>${t('{0} de {1}', formatTotal(r.done), formatTotal(r.planned))}</span></div>` +
+    `<div class="track"><i class="plan" style="width:${(r.planned / max * 100).toFixed(1)}%"></i><i style="width:${(r.done / max * 100).toFixed(1)}%"></i></div></div>`
+  )).join('');
 }
 
 /** Navegación entre meses de las estadísticas (mismo aspecto que la de semanas). */

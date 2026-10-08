@@ -20,6 +20,9 @@ import * as ui from './ui-components.js';
 import { LANG, LOCALE, isEnglish, startTranslator, t } from './i18n.js';
 import { setupMenuAndPomodoro } from './pomodoro-ui.js';
 import { setupTour } from './tour.js';
+import { setupExport } from './export-ui.js';
+import { setupWeekly } from './weekly-ui.js';
+import { setupPush } from './push-ui.js';
 import { buildShareText } from './summary.js';
 import {
   addDays, dateForDow, formatLongDate, fromHHMM, minutesOfDay, plural, shortTitle, toDateKey, toHHMM, weekDates
@@ -65,6 +68,9 @@ function createContext() {
     badgesSheet: sheets.register($('sheetBadges')),
     menuSheet: sheets.register($('sheetMenu')),
     pomodoroSheet: sheets.register($('sheetPomodoro')),
+    exportSheet: sheets.register($('sheetExport')),
+    tagsSheet: sheets.register($('sheetTags')),
+    weeklySheet: sheets.register($('sheetWeekly')),
     catsSheet: sheets.register($('sheetCats')),
     deleteSheet: sheets.register($('sheetDelete')),
     view: { selectedDow: clock().getDay(), weekOffset: 0, sorting: false, dateKey: toDateKey(clock()), minuteKey: '', stale: false },
@@ -77,6 +83,11 @@ function createContext() {
     pomodoroTick: () => {}, // lo sustituye setupMenuAndPomodoro
     openTour: () => {},     // lo sustituye setupTour
     maybeShowTour: () => {},
+    maybeShowWeekly: () => {},  // lo sustituye setupWeekly
+    markWeeklySeen: () => {},
+    pushActive: () => false,  // lo sustituye setupPush
+    syncPush: () => {},
+    refreshPushSetting: () => {},
     render: () => {},       // lo sustituye createRenderer
     requestRender: () => {}
   };
@@ -129,6 +140,21 @@ function applyCategories(ctx) {
   selectCategory(editor.category);
 }
 
+/** Nombres de las etiquetas en la capa de vistas; si cambian, se repinta el selector del editor. */
+function applyTags(ctx) {
+  const tags = ctx.state.getTags();
+  const signature = JSON.stringify(tags);
+  if (signature === ctx.tagSignature) return;
+  ctx.tagSignature = signature;
+  ui.setTagNames(Object.fromEntries(tags.map(tag => [tag.id, tag.name])));
+  if (editor.tag && !tags.some(tag => tag.id === editor.tag)) editor.tag = '';
+  renderTagChips(ctx);
+}
+
+function renderTagChips(ctx) {
+  $('fG').innerHTML = ui.tagChipsMarkup(ctx.state.getTags(), editor.tag);
+}
+
 function createRenderer(ctx) {
   const { state, view } = ctx;
   let frame = 0;
@@ -148,6 +174,7 @@ function createRenderer(ctx) {
   function render(now = ctx.clock()) {
     view.stale = false;
     applyCategories(ctx);
+    applyTags(ctx);
     const anchor = anchorOf(ctx, now);
     const dates = weekDates(anchor);
     const date = dates.find(d => d.getDay() === view.selectedDow) || anchor;
@@ -329,7 +356,7 @@ function setupList(ctx) {
 /* ═════════════ Editor de actividad ═════════════ */
 
 const editor = {
-  key: null, id: null, category: 'libre',
+  key: null, id: null, category: 'libre', tag: '',
   subtasks: [],            // copia de trabajo de las subtareas de la actividad
   rule: null,              // serie semanal a la que pertenece la actividad editada (si sigue vigente)
   repeat: false,           // interruptor "repetir" / "aplicar a las próximas semanas"
@@ -376,6 +403,7 @@ function openEditor(ctx, id) {
     $('fE').value = toHHMM(block.e);
     $('fN').value = block.n;
     selectCategory(block.c);
+    editor.tag = block.g || '';
   } else {
     const lastEnd = blocks.length ? Math.max(...blocks.map(b => b.e)) : 9 * 60;
     const start = Math.min(lastEnd, 22 * 60 + 30);
@@ -384,10 +412,13 @@ function openEditor(ctx, id) {
     $('fE').value = toHHMM(Math.min(start + 60, 1439));
     $('fN').value = '';
     selectCategory('libre');
+    editor.tag = '';
   }
 
   editor.subtasks = block && block.k ? block.k.map(item => ({ ...item })) : [];
   $('fKnew').value = '';
+  $('fGnew').value = '';
+  renderTagChips(ctx);
   renderSubtasks();
 
   // Repetición: una actividad de una serie vigente se puede cambiar "para las próximas semanas" o dejar de repetir.
@@ -428,6 +459,27 @@ function selectCategory(key) {
 
 function setupEditor(ctx) {
   const { state, toast } = ctx;
+  $('fG').addEventListener('click', e => {
+    const chip = e.target.closest('[data-g]');
+    if (!chip) return;
+    editor.tag = chip.dataset.g;
+    renderTagChips(ctx);
+    const again = document.querySelector(`#fG [data-g="${editor.tag}"]`);
+    if (again) again.focus();
+  });
+  const addTagFromEditor = () => {
+    const name = $('fGnew').value.trim();
+    if (!name) return;
+    const result = state.addTag(name);
+    if (!result.ok) { showEditorError(result.error); return; }
+    showEditorError('');
+    editor.tag = result.tag.id;
+    $('fGnew').value = '';
+    applyTags(ctx);
+    renderTagChips(ctx);
+  };
+  $('fGadd').addEventListener('click', addTagFromEditor);
+  $('fGnew').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addTagFromEditor(); } });
   $('fC').innerHTML = ui.categoryChipsMarkup();
   $('fC').addEventListener('click', e => {
     const chip = e.target.closest('.chip');
@@ -487,7 +539,8 @@ function setupEditor(ctx) {
       e: fromHHMM($('fE').value),
       c: editor.category,
       n: $('fN').value.trim(),
-      k: editor.subtasks
+      k: editor.subtasks,
+      g: editor.tag
     };
     const dows = Array.from(editor.dows);
     let result;
@@ -496,7 +549,7 @@ function setupEditor(ctx) {
       result = state.updateBlock(editor.key, editor.id, draft);
       if (result.ok && editor.repeat) {
         series = editor.rule
-          ? state.changeRecurring(editor.rule.id, editor.key, { t: draft.t, c: draft.c, s: draft.s, e: draft.e, k: draft.k, dows })
+          ? state.changeRecurring(editor.rule.id, editor.key, { t: draft.t, c: draft.c, s: draft.s, e: draft.e, k: draft.k, g: draft.g, dows })
           : state.addRecurring(editor.key, draft, dows, { blockId: editor.id });
       }
     } else if (editor.repeat) {
@@ -710,6 +763,7 @@ function setupStats(ctx) {
       $('sgTitle').textContent = 'Esta semana';
       $('statsRange').textContent = ui.weekRangeLabel(weekDates(now));
       $('statsBody').innerHTML = ui.statsMarkup(ctx.state.weekSummary(now));
+      $('statsTags').innerHTML = ui.tagStatsMarkup(ctx.state.weekTagSummary(now), ctx.state.getTags());
       return;
     }
     const result = ctx.state.monthSummary(now, stats.month);
@@ -721,6 +775,7 @@ function setupStats(ctx) {
     });
     $('statsBody').innerHTML = ui.statsMarkup(result.summary, { empty: 'Sin actividades este mes.' })
       + ui.monthDaysMarkup({ counted: result.countedDays, met: result.metDays });
+    $('statsTags').innerHTML = ui.tagStatsMarkup(result.tagSummary, ctx.state.getTags());
     const again = focused && $(focused);
     if (again && again.closest('#statsNav') && !again.disabled) again.focus();
   }
@@ -752,6 +807,48 @@ function setupStats(ctx) {
     } catch (_) { ctx.toast.show('No se pudo compartir el resumen.', { duration: 5000 }); }
   });
   $('closeStats').addEventListener('click', ctx.statsSheet.close);
+}
+
+/* ═════════════ Etiquetas ═════════════ */
+
+function setupTags(ctx) {
+  const { state, toast } = ctx;
+  const paint = () => { $('tagList').innerHTML = ui.tagManagerMarkup(state.getTags()); };
+  const showError = message => { $('tagErr').textContent = message || ''; $('tagErr').hidden = !message; };
+
+  $('menuTags').addEventListener('click', () => { showError(''); $('tagNew').value = ''; paint(); ctx.tagsSheet.open(); });
+  $('closeTags').addEventListener('click', ctx.tagsSheet.close);
+
+  const add = () => {
+    const name = $('tagNew').value.trim();
+    if (!name) return;
+    const result = state.addTag(name);
+    if (!result.ok) { showError(result.error); return; }
+    showError('');
+    $('tagNew').value = '';
+    ctx.cloud.track('tag_created');
+    paint();
+  };
+  $('tagAdd').addEventListener('click', add);
+  $('tagNew').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+
+  $('tagList').addEventListener('change', e => {
+    const input = e.target.closest('[data-tag-name]');
+    if (!input) return;
+    const result = state.renameTag(input.dataset.tagName, input.value);
+    if (!result.ok) { showError(result.error); paint(); return; }
+    showError('');
+    paint();
+  });
+  $('tagList').addEventListener('click', e => {
+    const button = e.target.closest('[data-act="delete-tag"]');
+    if (!button) return;
+    const result = state.deleteTag(button.dataset.id);
+    if (!result.ok) return;
+    showError('');
+    paint();
+    toast.show('Etiqueta eliminada', { label: 'Deshacer', onAction: () => { state.restoreTag(result.removed); } });
+  });
 }
 
 /* ═════════════ Categorías propias ═════════════ */
@@ -866,6 +963,13 @@ function setupSettings(ctx) {
       ? 'Aparece un botón en Estadísticas para enviar un texto con tus totales por categoría y tu racha. Nunca incluye los títulos de tus actividades.'
       : 'Desactivado. Si lo activas, podrás enviar un resumen de tu semana desde Estadísticas.';
 
+    ctx.refreshPushSetting();
+    const weekly = state.settings.getFlag('weekly');
+    $('weeklySwitch').setAttribute('aria-checked', weekly);
+    $('weeklyStatus').textContent = weekly
+      ? 'Cada semana, al abrir la app, verás un resumen de la semana anterior. Solo se muestra aquí: no se envía a ningún sitio.'
+      : 'Desactivado. Si lo activas, al abrir la app en una semana nueva verás cómo fue la anterior.';
+
     const iosHint = platformInfo.ios && !platformInfo.standalone && !ctx.native;
     $('installBlock').hidden = !(install.available() || iosHint);
     $('installBtn').hidden = !install.available();
@@ -938,6 +1042,12 @@ function setupSettings(ctx) {
     state.settings.set('lang', e.target.value === 'en' ? 'en' : 'es');
     location.reload();
   });
+  $('weeklySwitch').addEventListener('click', () => {
+    const on = !state.settings.getFlag('weekly');
+    state.settings.setFlag('weekly', on);
+    if (on) ctx.markWeeklySeen();
+    refreshSettings();
+  });
   $('shareSwitch').addEventListener('click', () => {
     state.settings.setFlag('share', !state.settings.getFlag('share'));
     refreshSettings();
@@ -999,7 +1109,7 @@ function refreshGate(ctx) {
   const gated = isGated(ctx);
   $('gate').hidden = !gated;
   $('app').hidden = gated;
-  if (gated) ctx.sheets.closeActive(); else ctx.maybeShowTour();
+  if (gated) ctx.sheets.closeActive(); else { ctx.maybeShowTour(); setTimeout(ctx.maybeShowWeekly, 900); }
   $('gateMsg').textContent = location.protocol === 'file:' && ctx.account.status !== 'loading'
     ? 'Abierta como archivo, no se puede iniciar sesión. Ábrela desde una dirección https:// o http://localhost.'
     : (GATE_TEXT[ctx.account.status] || '');
@@ -1165,12 +1275,13 @@ function setupClock(ctx) {
 
   /** En nativo se reprograman las próximas notificaciones locales (suenan con la app cerrada). */
   ctx.syncNative = debounce(() => {
+    ctx.syncPush();
     if (!ctx.native) return;
     notifier.sync(state.upcomingStarts(ctx.clock(), NOTIFICATIONS.nativeHorizonDays, NOTIFICATIONS.nativeMaxPending, leadOf(ctx)));
   }, 600);
 
   const announce = (block, lead = 0) => {
-    if (!ctx.native && notifier.status().enabled) notifier.announce(block, lead);
+    if (!ctx.native && notifier.status().enabled && !ctx.pushActive()) notifier.announce(block, lead);
     else if (!document.hidden) {
       toast.show(lead > 0 ? `En ${lead} min: ${shortTitle(block.t)}` : `Ahora: ${shortTitle(block.t)}`, { duration: 6000 });
     }
@@ -1262,10 +1373,14 @@ function main() {
   setupDayMenu(ctx);
   setupBadges(ctx);
   setupTour(ctx);
+  setupExport(ctx);
+  setupWeekly(ctx);
+  setupPush(ctx);
   setupNative(ctx);
   setupMenuAndPomodoro(ctx, { openBadges: () => openBadges(ctx), openTour: () => ctx.openTour() });
   setupCategories(ctx);
   setupStats(ctx);
+  setupTags(ctx);
   setupSettings(ctx);
   setupAccount(ctx);
   setupClock(ctx).start();

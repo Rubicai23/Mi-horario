@@ -108,6 +108,14 @@
     <label class="f"><span>Fin</span><input id="fE" type="time"></label>
   </div>
   <div class="chips" id="fC" role="group" aria-label="Tipo de actividad"></div>
+  <div class="f tagrow">
+    <span>Etiqueta</span>
+    <div class="chips" id="fG" role="group" aria-label="Etiqueta"></div>
+    <div class="sub-add">
+      <input id="fGnew" type="text" maxlength="24" placeholder="Nueva etiqueta" autocomplete="off" enterkeyhint="done" aria-label="Nueva etiqueta">
+      <button type="button" class="btn2" id="fGadd">Crear</button>
+    </div>
+  </div>
   <div class="f subs">
     <span>Subtareas</span>
     <ul class="sub-list" id="fK"></ul>
@@ -220,6 +228,8 @@
   <div class="menu">
     <button class="menu-item" id="menuPomo"><b>Pomodoro</b><small>Temporizador para concentrarte por tramos, con descansos.</small></button>
     <button class="menu-item" id="menuBadges"><b>Insignias</b><small>Tus logros y lo que te falta para el siguiente.</small></button>
+    <button class="menu-item" id="menuTags"><b>Etiquetas</b><small>Agrupa actividades por proyecto o tema y mira cuánto tiempo les dedicas.</small></button>
+    <button class="menu-item" id="menuExport"><b>Exportar al calendario</b><small>Crea un archivo .ics para Calendario de iPhone o Google Calendar.</small></button>
     <button class="menu-item" id="menuTour"><b>Ver tutorial</b><small>Repasa en 3 pantallas cómo funciona la app.</small></button>
   </div>
   <button class="btn2 block" id="closeMenu">Cerrar</button>
@@ -250,6 +260,37 @@
   <button class="btn" id="closePomo">Hecho</button>
 </section>
 
+<!-- Etiquetas -->
+<section class="sheet" id="sheetTags" role="dialog" aria-modal="true" aria-labelledby="stgTitle">
+  <h2 id="stgTitle">Etiquetas</h2>
+  <p class="set-s menu-sub">Úsalas para agrupar actividades por proyecto o tema (por ejemplo «TFG» o «Carnet de conducir»). Se eligen al crear o editar una actividad, y en Estadísticas ves el tiempo de cada una.</p>
+  <div id="tagList"></div>
+  <div class="sub-add">
+    <input id="tagNew" type="text" maxlength="24" placeholder="Nueva etiqueta" autocomplete="off" enterkeyhint="done" aria-label="Nueva etiqueta">
+    <button type="button" class="btn2" id="tagAdd">Crear</button>
+  </div>
+  <p class="err" id="tagErr" role="alert" hidden></p>
+  <button class="btn" id="closeTags">Hecho</button>
+</section>
+
+<!-- Exportar al calendario -->
+<section class="sheet" id="sheetExport" role="dialog" aria-modal="true" aria-labelledby="sxTitle">
+  <h2 id="sxTitle">Exportar al calendario</h2>
+  <p class="set-s menu-sub">Crea un archivo .ics con tus actividades, que puedes abrir en el Calendario de iPhone, Google Calendar u Outlook. Es una copia: si luego cambias algo aquí, vuelve a exportar.</p>
+  <div class="set-block">
+    <div class="set-t">Qué días</div>
+    <div class="chips" id="exportRange" role="group" aria-label="Qué días exportar"></div>
+  </div>
+  <div class="set-row slim">
+    <div><div class="set-t">Aviso del calendario</div></div>
+    <select class="select" id="exportAlarm" aria-label="Aviso del calendario"></select>
+  </div>
+  <p class="set-s" id="exportInfo"></p>
+  <p class="err" id="exportErr" role="alert" hidden></p>
+  <button class="btn" id="exportGo">Exportar</button>
+  <div class="sub"><button id="exportCancel">Cancelar</button></div>
+</section>
+
 <!-- Insignias -->
 <section class="sheet" id="sheetBadges" role="dialog" aria-modal="true" aria-labelledby="sbTitle">
   <h2 id="sbTitle">Insignias</h2>
@@ -267,6 +308,14 @@
       <p class="set-s" id="notifyStatus"></p>
     </div>
     <button class="switch" id="notifySwitch" role="switch" aria-checked="false" aria-label="Avisos de actividad"><i></i></button>
+  </div>
+
+  <div class="set-row" id="pushRow" hidden>
+    <div>
+      <div class="set-t">Avisos con la app cerrada</div>
+      <p class="set-s" id="pushStatus"></p>
+    </div>
+    <button class="switch" id="pushSwitch" role="switch" aria-checked="false" aria-label="Avisos con la app cerrada"><i></i></button>
   </div>
 
   <div class="set-row">
@@ -327,6 +376,14 @@
 
   <div class="set-row">
     <div>
+      <div class="set-t">Resumen cada semana</div>
+      <p class="set-s" id="weeklyStatus"></p>
+    </div>
+    <button class="switch" id="weeklySwitch" role="switch" aria-checked="false" aria-label="Resumen cada semana"><i></i></button>
+  </div>
+
+  <div class="set-row">
+    <div>
       <div class="set-t">Estadísticas de uso</div>
       <p class="set-s" id="analyticsStatus"></p>
     </div>
@@ -374,8 +431,19 @@
   <p class="set-s range" id="statsRange"></p>
   <div id="statsBody"></div>
   <div class="set-btns" id="shareRow" hidden><button class="btn2" id="shareStats" type="button">Compartir resumen</button></div>
+  <div id="statsTags"></div>
   <p class="set-s foot-note">Cuenta como hecho lo que marcas con el círculo de cada actividad.</p>
   <button class="btn" id="closeStats">Cerrar</button>
+</section>
+
+<!-- Resumen de la semana pasada (opcional) -->
+<section class="sheet" id="sheetWeekly" role="dialog" aria-modal="true" aria-labelledby="wkTitle">
+  <h2 id="wkTitle">Tu semana pasada</h2>
+  <p class="set-s range" id="weeklyRange"></p>
+  <div id="weeklyBody"></div>
+  <p class="set-s" id="weeklyStreak"></p>
+  <div class="set-btns"><button class="btn2" id="weeklyShare" type="button">Compartir resumen</button></div>
+  <button class="btn" id="closeWeekly">Cerrar</button>
 </section>
 
 <script type="module" src="/src/app.js"></script>

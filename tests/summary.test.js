@@ -26,3 +26,13 @@ test('semana vacía y racha de 0: sin filas ni racha', () => {
 test('una racha de 1 va en singular', () => {
   assert.match(buildShareText({ summary: {}, range: 'x', streak: 1, categories, nameOf }), /Racha: 1 día 🔥/);
 });
+
+import { weeklyDue } from '../src/summary.js';
+test('weeklyDue: solo activado, con datos y una vez por semana', () => {
+  const base = { enabled: true, seen: null, thisMonday: '2026-10-05', hadActivities: true };
+  assert.equal(weeklyDue(base), true);
+  assert.equal(weeklyDue({ ...base, enabled: false }), false);
+  assert.equal(weeklyDue({ ...base, hadActivities: false }), false);
+  assert.equal(weeklyDue({ ...base, seen: '2026-10-05' }), false);
+  assert.equal(weeklyDue({ ...base, seen: '2026-09-28' }), true);
+});

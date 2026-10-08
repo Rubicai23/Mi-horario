@@ -208,7 +208,32 @@ export const EN = Object.freeze({
   'La nube rechazó la operación. Revisa que las reglas de Firestore estén publicadas.': 'The cloud rejected the operation. Check that the Firestore rules are published.',
   'Error interno de Firebase. Inténtalo de nuevo en un momento.': 'Internal Firebase error. Try again in a moment.',
   'No se pudo completar la operación ({0}).': 'The operation could not be completed ({0}).', 'Sin conexión con la nube.': 'No connection to the cloud.',
-  'No hay una sesión iniciada.': 'You are not signed in.', 'Contraseña incorrecta.': 'Incorrect password.'
+  'No hay una sesión iniciada.': 'You are not signed in.', 'Contraseña incorrecta.': 'Incorrect password.',
+  'Etiqueta': 'Tag', 'Crear': 'Create', 'Etiquetas': 'Tags',
+  'Agrupa actividades por proyecto o tema y mira cuánto tiempo les dedicas.': 'Group activities by project or topic and see how much time you spend on them.',
+  'Exportar al calendario': 'Export to calendar',
+  'Crea un archivo .ics para Calendario de iPhone o Google Calendar.': 'Creates an .ics file for iPhone Calendar or Google Calendar.',
+  'Úsalas para agrupar actividades por proyecto o tema (por ejemplo «TFG» o «Carnet de conducir»). Se eligen al crear o editar una actividad, y en Estadísticas ves el tiempo de cada una.': 'Use them to group activities by project or topic (for example "Thesis" or "Driving licence"). You pick them when creating or editing an activity, and in Stats you see the time for each one.',
+  'Crea un archivo .ics con tus actividades, que puedes abrir en el Calendario de iPhone, Google Calendar u Outlook. Es una copia: si luego cambias algo aquí, vuelve a exportar.': 'Creates an .ics file with your activities that you can open in iPhone Calendar, Google Calendar or Outlook. It is a copy: if you change something here later, export again.',
+  'Qué días': 'Which days', 'Aviso del calendario': 'Calendar alert', 'Nueva etiqueta': 'New tag', 'Qué días exportar': 'Which days to export',
+  'Se exportarán {0} en {1}.': '{0} will be exported over {1}.',
+  'No hay actividades en ese periodo.': 'There are no activities in that period.', 'Sin aviso': 'No alert',
+  'Archivo descargado. Ábrelo para añadirlo al calendario.': 'File downloaded. Open it to add it to your calendar.',
+  'Archivo listo para el calendario': 'File ready for the calendar', 'No se pudo crear el archivo.': 'The file could not be created.',
+  'Sin etiqueta': 'No tag', 'Nombre de la etiqueta': 'Tag name', 'Aún no tienes etiquetas.': 'You have no tags yet.', 'Por etiqueta': 'By tag',
+  'Etiqueta eliminada': 'Tag deleted',
+  'Avisos con la app cerrada': 'Alerts with the app closed',
+  'Inicia sesión para usar los avisos con la app cerrada.': 'Sign in to use alerts with the app closed.',
+  'Activado. Te llegan los avisos aunque la app esté cerrada. Se guarda en la nube la hora y el título de tus próximas actividades.': 'On. You get alerts even when the app is closed. The time and title of your upcoming activities are stored in the cloud.',
+  'Desactivado. Si lo activas, los avisos llegan aunque la app esté cerrada (en iPhone, con la app añadida a la pantalla de inicio).': 'Off. If you turn it on, alerts arrive even when the app is closed (on iPhone, with the app added to the Home Screen).',
+  'Permiso de notificaciones denegado.': 'Notification permission denied.',
+  'Avisos con la app cerrada activados.': 'Alerts with the app closed turned on.',
+  'No se pudo activar. Comprueba la conexión e inténtalo de nuevo.': 'Could not turn it on. Check your connection and try again.',
+  'Resumen cada semana': 'Weekly summary', 'Tu semana pasada': 'Your last week', 'Racha: {0} días 🔥': 'Streak: {0} days 🔥',
+  'Cada semana, al abrir la app, verás un resumen de la semana anterior. Solo se muestra aquí: no se envía a ningún sitio.': 'Each week, when you open the app, you will see a summary of the previous week. It is only shown here: it is not sent anywhere.',
+  'Desactivado. Si lo activas, al abrir la app en una semana nueva verás cómo fue la anterior.': 'Off. If you turn it on, when you open the app in a new week you will see how the previous one went.',
+  'Escribe un nombre para la etiqueta.': 'Enter a name for the tag.', 'Ya tienes una etiqueta con ese nombre.': 'You already have a tag with that name.',
+  'La etiqueta ya no existe.': 'That tag no longer exists.', 'Máximo {0} etiquetas. Elimina alguna.': 'Maximum {0} tags. Delete one.'
 });
 
 /** Palabras sueltas que cambian con el número: [singular, plural]. */

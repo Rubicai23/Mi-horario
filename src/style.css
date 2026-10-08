@@ -494,6 +494,15 @@ button { font-family: inherit; }
 .pomo-pill.paused { opacity: .6; }
 @media (prefers-reduced-motion: reduce) { .pomo-bar i { transition: none; } }
 
+/* ───── Etiquetas ───── */
+.tagrow > span { margin-bottom: 8px; }
+.tagrow .chips { margin-bottom: 0; }
+.mt.tag { color: var(--accent); }
+.tag-edit { flex: 1; margin: 0; min-width: 0; }
+.tag-edit input { width: 100%; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.stats-sub { margin: 18px 0 6px; }
+
 /* ───── Tutorial ───── */
 .tour { position: fixed; inset: 0; z-index: 60; display: flex; align-items: center; justify-content: center; padding: 24px; background: var(--bg); }
 .tour[hidden] { display: none; }

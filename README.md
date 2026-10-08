@@ -108,3 +108,12 @@ npm run cap:android      # build + sync + abrir Android Studio
 - **Inglés**: el idioma (`cfg:lang`) se lee al cargar y cambiarlo recarga la app. Los textos en español son la clave del diccionario `lang-en.js`; una clave con huecos `{0}` sirve también de patrón para traducir textos ya montados. El traductor del DOM solo se activa en inglés y respeta `translate="no"` (contenido del usuario). Hay una política de privacidad en inglés (`privacy-en.html`). El horario DAM de ejemplo solo existe en español. `tests/i18n.test.js` comprueba que todo texto fijo y todo `t('…')` tiene traducción.
 - **Reglas de Firestore**: sin cambios en esta tanda.
 - **Pruebas en navegador** (`e2e/`): `node e2e/server.mjs` con `APP_ROOT` apuntando al proyecto y `node e2e/t5.mjs`; necesitan Playwright instalado.
+
+
+## Tanda 6
+
+- **Etiquetas** (☰ → Etiquetas): agrupan actividades por proyecto y aparecen en Estadísticas. Se sincronizan (campo `tags` del perfil: hay que republicar `firestore.rules`).
+- **Exportar al calendario** (☰ → Exportar): archivo `.ics` para Calendario de iPhone / Google Calendar (`src/ics.js`).
+- **Resumen semanal automático** (Ajustes → Resumen cada semana): opcional, apagado por defecto.
+- **Avisos con la app cerrada**: ver `AVISOS-PUSH.md` (necesita plan Blaze y desplegar `functions/`).
+- **Widget**: no es posible en iPhone sin app nativa de iOS (Swift/WidgetKit y un Mac con Xcode).
