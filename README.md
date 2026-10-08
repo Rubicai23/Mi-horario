@@ -79,19 +79,25 @@ Limitación: las reglas no tienen bucles, así que no pueden validar el contenid
 
 Settings → Pages → Source: **GitHub Actions**. Cada push a `main` ejecuta tests, build y despliegue.
 
-## Capacitor
+## Capacitor y APK de Android
+
+**Sin instalar nada (recomendado):** en GitHub, pestaña **Actions → «Crear APK de Android» → Run workflow**. Al terminar (unos 10 min) el APK está en el resumen de la ejecución, en «Artifacts → mi-horario-apk». El flujo (`.github/workflows/android.yml`) corre los tests, compila la web, genera el proyecto Android con `npx cap add android`, añade los permisos (`scripts/android-prepare.mjs`), genera los iconos desde `assets/` y compila un APK de depuración, que se puede instalar directamente en el móvil.
+
+**En tu ordenador (opcional, con Android Studio):**
 
 ```
 npm run build
-npx cap add android      # y/o ios (macOS + Xcode)
+npx cap add android
+npm run android:prepare
+npx capacitor-assets generate --android --iconBackgroundColor '#3F6B5A' --iconBackgroundColorDark '#3F6B5A'
 npm run cap:android      # build + sync + abrir Android Studio
-npm run cap:ios
 ```
 
-- Android 12+: las alarmas exactas pueden requerir el permiso "Alarmas y recordatorios".
-- iOS limita a 64 notificaciones locales pendientes; la app programa como máximo 60 de los próximos 7 días.
-- Analytics no está soportado en el contenedor nativo; la app lo desactiva ahí.
-- Los iconos de las tiendas (adaptativos de Android, AppIcon de iOS) se generan aparte, p. ej. con `@capacitor/assets`.
+- Permisos: avisos (Android 13+), alarmas exactas (`USE_EXACT_ALARM`, y `SCHEDULE_EXACT_ALARM` hasta Android 12) y reinicio del móvil, para que los avisos suenen con la app cerrada.
+- Botón «atrás» de Android: cierra el tutorial o la hoja abierta y, si no hay nada, minimiza la app.
+- En la app nativa, la política de privacidad se abre desde la web publicada (`WEB_HOME` en `src/app.js`).
+- El APK de depuración sirve para uso personal. Para Google Play haría falta un APK/AAB firmado (release) y una cuenta de desarrollador.
+- iOS limita a 64 notificaciones locales pendientes; la app programa como máximo 60 de los próximos 7 días. Analytics no se usa en el contenedor nativo.
 
 ## Tanda 5: menú, Pomodoro, tutorial, resumen e inglés
 

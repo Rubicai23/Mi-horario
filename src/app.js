@@ -1226,6 +1226,26 @@ function setupBadges(ctx) {
   }, 4000);
 }
 
+/* ═════════════ App nativa (Android/iOS) ═════════════ */
+
+const WEB_HOME = 'https://rubicai23.github.io/mi-horario/';
+
+/** Dentro de la app no hay carpeta pública: la política de privacidad se abre desde la web. */
+function setupNative(ctx) {
+  if (!ctx.native) return;
+  document.querySelectorAll('a[href*="privacidad.html"], a[href*="privacy-en.html"]').forEach(a => {
+    a.setAttribute('href', WEB_HOME + a.getAttribute('href'));
+  });
+  // Botón «atrás» de Android: cierra tutorial u hojas y, si no hay nada abierto, minimiza la app (no la cierra de golpe).
+  import('@capacitor/app').then(({ App }) => {
+    App.addListener('backButton', () => {
+      if (ctx.isTourOpen()) ctx.closeTour();
+      else if (ctx.sheets.isOpen()) ctx.sheets.closeActive();
+      else App.minimizeApp();
+    });
+  }).catch(() => { /* sin plugin: el sistema se encarga */ });
+}
+
 function main() {
   if (isEnglish) {
     document.querySelectorAll('a[href^="privacidad.html"]').forEach(a => {
@@ -1242,6 +1262,7 @@ function main() {
   setupDayMenu(ctx);
   setupBadges(ctx);
   setupTour(ctx);
+  setupNative(ctx);
   setupMenuAndPomodoro(ctx, { openBadges: () => openBadges(ctx), openTour: () => ctx.openTour() });
   setupCategories(ctx);
   setupStats(ctx);

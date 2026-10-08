@@ -34,6 +34,8 @@ export function setupTour(ctx) {
     opener = null;
   };
 
+  ctx.isTourOpen = () => !$('tour').hidden;
+  ctx.closeTour = close;
   ctx.openTour = () => {
     ctx.sheets.closeActive();
     opener = document.activeElement;
