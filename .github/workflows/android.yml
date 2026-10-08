@@ -1,0 +1,56 @@
+name: Crear APK de Android
+
+# Se ejecuta a mano: pestaña Actions → «Crear APK de Android» → Run workflow.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Instalar dependencias
+        run: npm install --no-audit --no-fund
+
+      - name: Tests
+        run: npm test
+
+      - name: Compilar la web
+        run: npm run build
+
+      - name: Crear el proyecto Android
+        run: npx cap add android
+
+      - name: Permisos para los avisos con la app cerrada
+        run: node scripts/android-prepare.mjs
+
+      - name: Iconos de la app
+        run: npx capacitor-assets generate --android --iconBackgroundColor '#3F6B5A' --iconBackgroundColorDark '#3F6B5A'
+
+      - name: Copiar la web al proyecto Android
+        run: npx cap sync android
+
+      - name: Compilar el APK
+        working-directory: android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mi-horario-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30
+          if-no-files-found: error
